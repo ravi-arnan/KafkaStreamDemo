@@ -25,22 +25,22 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 const els = {
-  connectionBadge: $('#connectionBadge'),
-  connDot: $('#connectionBadge .conn-dot'),
-  connLabel: $('#connectionBadge .conn-label'),
-  uptimeDisplay: $('#uptimeDisplay'),
-  kpiProduced: $('#kpiProduced'),
-  kpiConsumed: $('#kpiConsumed'),
-  kpiThroughput: $('#kpiThroughput'),
-  kpiTopics: $('#kpiTopics'),
-  currentThroughputBadge: $('#currentThroughputBadge'),
-  logStream: $('#logStream'),
-  topicsGrid: $('#topicsGrid'),
-  consumersList: $('#consumersList'),
-  producerLog: $('#producerLog'),
-  streamTopicFilter: $('#streamTopicFilter'),
-  streamLevelFilter: $('#streamLevelFilter'),
-  topicModal: $('#topicModal'),
+  connectionBadge: $("#connectionBadge"),
+  connDot: $("#connectionBadge .conn-dot"),
+  connLabel: $("#connectionBadge .conn-label"),
+  uptimeDisplay: $("#uptimeDisplay"),
+  kpiProduced: $("#kpiProduced"),
+  kpiConsumed: $("#kpiConsumed"),
+  kpiThroughput: $("#kpiThroughput"),
+  kpiTopics: $("#kpiTopics"),
+  currentThroughputBadge: $("#currentThroughputBadge"),
+  logStream: $("#logStream"),
+  topicsGrid: $("#topicsGrid"),
+  consumersList: $("#consumersList"),
+  producerLog: $("#producerLog"),
+  streamTopicFilter: $("#streamTopicFilter"),
+  streamLevelFilter: $("#streamLevelFilter"),
+  topicModal: $("#topicModal"),
 };
 
 // ─── SSE Connection ──────────────────────────────────────────────────────────
@@ -48,9 +48,9 @@ const els = {
 let sse;
 
 function connectSSE() {
-  sse = new EventSource('./api/stream');
+  sse = new EventSource("./api/stream");
 
-  sse.addEventListener('init', (e) => {
+  sse.addEventListener("init", (e) => {
     const data = JSON.parse(e.data);
     state.topics = data.topics || [];
     state.consumerGroups = data.consumerGroups || [];
@@ -61,9 +61,10 @@ function connectSSE() {
     renderConsumers();
     updateStats();
     populateTopicFilters();
+    updateArchStats(state.stats);
   });
 
-  sse.addEventListener('messages', (e) => {
+  sse.addEventListener("messages", (e) => {
     const { records, stats } = JSON.parse(e.data);
     if (stats) Object.assign(state.stats, stats);
 
@@ -75,16 +76,17 @@ function connectSSE() {
     updateThroughputChart(state.stats.throughput);
     updateLevelBars();
     updateServiceList();
+    updateArchView(records, state.stats);
   });
 
-  sse.addEventListener('manual-message', (e) => {
+  sse.addEventListener("manual-message", (e) => {
     const { record } = JSON.parse(e.data);
     processRecord(record, true);
     appendProducerLog(record);
-    showToast(`Message sent to ${record.topic}`, 'success');
+    showToast(`Message sent to ${record.topic}`, "success");
   });
 
-  sse.addEventListener('topic-created', (e) => {
+  sse.addEventListener("topic-created", (e) => {
     const topic = JSON.parse(e.data);
     if (!state.topics.find((t) => t.name === topic.name)) {
       state.topics.push(topic);
@@ -92,19 +94,19 @@ function connectSSE() {
     renderTopics();
     populateTopicFilters();
     updateTopicCount();
-    showToast(`Topic "${topic.name}" created`, 'success');
+    showToast(`Topic "${topic.name}" created`, "success");
   });
 
-  sse.addEventListener('topic-deleted', (e) => {
+  sse.addEventListener("topic-deleted", (e) => {
     const { name } = JSON.parse(e.data);
     state.topics = state.topics.filter((t) => t.name !== name);
     renderTopics();
     populateTopicFilters();
     updateTopicCount();
-    showToast(`Topic "${name}" deleted`, 'info');
+    showToast(`Topic "${name}" deleted`, "info");
   });
 
-  sse.addEventListener('producer-config', (e) => {
+  sse.addEventListener("producer-config", (e) => {
     const cfg = JSON.parse(e.data);
     Object.assign(state.producerConfig, cfg);
   });
@@ -117,16 +119,16 @@ function connectSSE() {
 
 function setConnected(val) {
   state.connected = val;
-  els.connDot.className = 'conn-dot' + (val ? ' connected' : ' error');
-  els.connLabel.textContent = val ? 'Connected' : 'Reconnecting...';
+  els.connDot.className = "conn-dot" + (val ? " connected" : " error");
+  els.connLabel.textContent = val ? "Connected" : "Reconnecting...";
 }
 
 // ─── Message Processing ──────────────────────────────────────────────────────
 
 function processRecord(record, isManual) {
   const val = record.value || {};
-  const level = val.level || 'INFO';
-  const service = val.service || 'unknown';
+  const level = val.level || "INFO";
+  const service = val.service || "unknown";
 
   // Level stats
   state.levelCounts[level] = (state.levelCounts[level] || 0) + 1;
@@ -143,8 +145,8 @@ function processRecord(record, isManual) {
     const topicFilter = els.streamTopicFilter.value;
     const levelFilter = els.streamLevelFilter.value;
     if (
-      (topicFilter === 'all' || record.topic === topicFilter) &&
-      (levelFilter === 'all' || level === levelFilter)
+      (topicFilter === "all" || record.topic === topicFilter) &&
+      (levelFilter === "all" || level === levelFilter)
     ) {
       prependStreamEntry(record, true);
     }
@@ -153,19 +155,19 @@ function processRecord(record, isManual) {
 
 function prependStreamEntry(record, isNew) {
   const stream = els.logStream;
-  const empty = stream.querySelector('.stream-empty');
+  const empty = stream.querySelector(".stream-empty");
   if (empty) empty.remove();
 
   const val = record.value || {};
-  const level = val.level || 'INFO';
+  const level = val.level || "INFO";
   const time = formatTime(record.timestamp);
 
-  const entry = document.createElement('div');
-  entry.className = 'log-entry' + (isNew ? ' new' : '');
+  const entry = document.createElement("div");
+  entry.className = "log-entry" + (isNew ? " new" : "");
   entry.innerHTML = `
     <span class="log-time">${time}</span>
     <span class="log-level-cell"><span class="level-badge ${level.toLowerCase()}">${level}</span></span>
-    <span class="log-service">${escapeHtml(val.service || '')}</span>
+    <span class="log-service">${escapeHtml(val.service || "")}</span>
     <span class="log-message">${escapeHtml(val.message || JSON.stringify(val))}</span>
     <span class="log-topic">${escapeHtml(record.topic)}</span>
   `;
@@ -173,7 +175,7 @@ function prependStreamEntry(record, isNew) {
   stream.insertBefore(entry, stream.firstChild);
 
   // Keep DOM lean: remove entries beyond 200
-  const entries = stream.querySelectorAll('.log-entry');
+  const entries = stream.querySelectorAll(".log-entry");
   if (entries.length > 200) {
     entries[entries.length - 1].remove();
   }
@@ -181,35 +183,37 @@ function prependStreamEntry(record, isNew) {
 
 function appendProducerLog(record) {
   const container = els.producerLog;
-  const empty = container.querySelector('.stream-empty');
+  const empty = container.querySelector(".stream-empty");
   if (empty) empty.remove();
   prependTo(container, record, true);
 }
 
 function prependTo(container, record, isNew) {
   const val = record.value || {};
-  const level = val.level || 'INFO';
-  const entry = document.createElement('div');
-  entry.className = 'log-entry' + (isNew ? ' new' : '');
+  const level = val.level || "INFO";
+  const entry = document.createElement("div");
+  entry.className = "log-entry" + (isNew ? " new" : "");
   entry.innerHTML = `
     <span class="log-time">${formatTime(record.timestamp)}</span>
     <span class="log-level-cell"><span class="level-badge ${level.toLowerCase()}">${level}</span></span>
-    <span class="log-service">${escapeHtml(val.service || '')}</span>
-    <span class="log-message">${escapeHtml(val.message || '')}</span>
+    <span class="log-service">${escapeHtml(val.service || "")}</span>
+    <span class="log-message">${escapeHtml(val.message || "")}</span>
     <span class="log-topic">${escapeHtml(record.topic)}</span>
   `;
   container.insertBefore(entry, container.firstChild);
-  const entries = container.querySelectorAll('.log-entry');
+  const entries = container.querySelectorAll(".log-entry");
   if (entries.length > 50) entries[entries.length - 1].remove();
 }
 
 // ─── Stats & Charts ──────────────────────────────────────────────────────────
 
-let chartCanvas, chartCtx, chartLastRender = 0;
+let chartCanvas,
+  chartCtx,
+  chartLastRender = 0;
 
 function initChart() {
-  chartCanvas = $('#throughputChart');
-  chartCtx = chartCanvas.getContext('2d');
+  chartCanvas = $("#throughputChart");
+  chartCtx = chartCanvas.getContext("2d");
 }
 
 function updateThroughputChart(current) {
@@ -230,7 +234,7 @@ function updateThroughputChart(current) {
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   ctx.scale(dpr, dpr);
-  canvas.style.height = h + 'px';
+  canvas.style.height = h + "px";
 
   // Only draw points that have real values
   const history = state.throughputHistory;
@@ -241,7 +245,10 @@ function updateThroughputChart(current) {
   ctx.clearRect(0, 0, w, h);
 
   // Grid lines
-  const dividerColor = getComputedStyle(document.documentElement).getPropertyValue('--divider').trim() || '#1e2030';
+  const dividerColor =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--divider")
+      .trim() || "#1e2030";
   ctx.strokeStyle = dividerColor;
   ctx.lineWidth = 1;
   [0.25, 0.5, 0.75].forEach((frac) => {
@@ -255,10 +262,13 @@ function updateThroughputChart(current) {
   // Only render if we have data
   if (realPoints.length < 2) return;
 
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#f07030';
+  const accent =
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--accent")
+      .trim() || "#f07030";
   const gradient = ctx.createLinearGradient(0, 0, 0, h);
-  gradient.addColorStop(0, accent + '55');
-  gradient.addColorStop(1, accent + '00');
+  gradient.addColorStop(0, accent + "55");
+  gradient.addColorStop(1, accent + "00");
 
   // Build path from real data points (skip nulls)
   const points = [];
@@ -292,8 +302,8 @@ function updateThroughputChart(current) {
   }
   ctx.strokeStyle = accent;
   ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   ctx.stroke();
 }
 
@@ -314,22 +324,91 @@ function updateLevelBars() {
   Object.entries(state.levelCounts).forEach(([level, count]) => {
     const fill = $(`[data-level="${level}"]`);
     const counter = $(`[data-count="${level}"]`);
-    if (fill) fill.style.width = ((count / totals) * 100).toFixed(1) + '%';
+    if (fill) fill.style.width = ((count / totals) * 100).toFixed(1) + "%";
     if (counter) counter.textContent = formatNumber(count);
   });
 }
 
 function updateServiceList() {
-  const list = $('#serviceList');
-  const sorted = Object.entries(state.serviceCounts).sort((a, b) => b[1] - a[1]).slice(0, 7);
+  const list = $("#serviceList");
+  const sorted = Object.entries(state.serviceCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 7);
   if (!sorted.length) return;
 
-  list.innerHTML = sorted.map(([name, count]) => `
+  list.innerHTML = sorted
+    .map(
+      ([name, count]) => `
     <div class="service-item">
       <span class="service-name">${escapeHtml(name)}</span>
       <span class="service-count">${formatNumber(count)}</span>
     </div>
-  `).join('');
+  `,
+    )
+    .join("");
+}
+
+// ─── Architecture View ────────────────────────────────────────────────────────
+
+/**
+ * Hash a string key to a partition index (mirrors server-side logic).
+ * Used to determine which partition chip to highlight.
+ */
+function hashKeyToPartition(key, numPartitions) {
+  if (!key) return 0;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash << 5) - hash + key.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % numPartitions;
+}
+
+/**
+ * Briefly highlight a partition chip in the architecture diagram.
+ * @param {string} topic  - topic name (e.g. "app-logs")
+ * @param {number} partition - partition index (0, 1, 2)
+ */
+function flashPartition(topic, partition) {
+  const el = $(`#ap-${topic}-${partition}`);
+  if (!el) return;
+  el.classList.add("active");
+  setTimeout(() => el.classList.remove("active"), 600);
+}
+
+/**
+ * Update the static stats section of the Architecture view
+ * (produced count, broker total, throughput badge).
+ */
+function updateArchStats(stats) {
+  const produced = $(`#archStatProduced`);
+  const brokerTotal = $(`#archBrokerTotal`);
+  const badge = $(`#archThroughputBadge`);
+  if (produced)
+    produced.textContent = formatNumber(stats.totalProduced) + " msgs";
+  if (brokerTotal) brokerTotal.textContent = formatNumber(stats.totalProduced);
+  if (badge) badge.textContent = stats.throughput + " msg/s";
+}
+
+/**
+ * Called every time a batch of SSE messages arrives.
+ * Updates architecture stats and flashes the corresponding partitions.
+ */
+function updateArchView(records, stats) {
+  updateArchStats(stats);
+
+  // Flash partitions for each incoming record (throttle to avoid visual overload)
+  const MAX_FLASHES = 6;
+  const toFlash = records.slice(0, MAX_FLASHES);
+  toFlash.forEach((record, i) => {
+    setTimeout(() => {
+      const partition =
+        record.partition !== undefined
+          ? record.partition
+          : hashKeyToPartition(record.key, 3);
+      flashPartition(record.topic, partition);
+    }, i * 80);
+  });
 }
 
 // ─── Topics ──────────────────────────────────────────────────────────────────
@@ -340,7 +419,9 @@ function renderTopics() {
     grid.innerHTML = '<div class="empty-state">No topics. Create one!</div>';
     return;
   }
-  grid.innerHTML = state.topics.map((t) => `
+  grid.innerHTML = state.topics
+    .map(
+      (t) => `
     <div class="topic-card" data-topic="${escapeHtml(t.name)}">
       <div class="topic-name">
         <span>${escapeHtml(t.name)}</span>
@@ -354,10 +435,12 @@ function renderTopics() {
         <span class="topic-tag mono">${formatNumber(t.messageCount)} msgs</span>
       </div>
       <div class="topic-partitions">
-        ${(t.partitionDetails || []).map((p) => `<span class="partition-chip">P${p.id}: offset ${p.offset}</span>`).join('')}
+        ${(t.partitionDetails || []).map((p) => `<span class="partition-chip">P${p.id}: offset ${p.offset}</span>`).join("")}
       </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join("");
 
   updateTopicCount();
 }
@@ -370,37 +453,53 @@ function renderConsumers() {
     list.innerHTML = '<div class="empty-state">No consumer groups</div>';
     return;
   }
-  list.innerHTML = state.consumerGroups.map((g) => `
+  list.innerHTML = state.consumerGroups
+    .map(
+      (g) => `
     <div class="consumer-card">
       <div class="consumer-header">
         <div>
           <div class="consumer-id">${escapeHtml(g.id)}</div>
-          <div class="consumer-role">${escapeHtml(g.role || '')}</div>
+          <div class="consumer-role">${escapeHtml(g.role || "")}</div>
         </div>
         <div class="consumer-lag">
-          <div class="lag-value" id="lag-${g.id}">${g.lag ?? '—'}</div>
+          <div class="lag-value" id="lag-${g.id}">${g.lag ?? "—"}</div>
           <div class="lag-label">msg lag</div>
         </div>
       </div>
       <div class="consumer-topics">
-        ${(g.topics || []).map((t) => `<span class="consumer-topic-chip">${escapeHtml(t)}</span>`).join('')}
+        ${(g.topics || []).map((t) => `<span class="consumer-topic-chip">${escapeHtml(t)}</span>`).join("")}
       </div>
     </div>
-  `).join('');
+  `,
+    )
+    .join("");
 }
 
 // Refresh consumer lag every 5s
 setInterval(async () => {
   try {
-    const groups = await fetchJSON('./api/consumer-groups');
+    const groups = await fetchJSON("./api/consumer-groups");
     groups.forEach((g) => {
+      // Update Consumers view lag
       const el = $(`#lag-${g.id}`);
       if (el) {
         const prev = parseInt(el.textContent) || 0;
         if (prev !== g.lag) {
           el.textContent = g.lag;
-          el.style.animation = 'none';
-          requestAnimationFrame(() => { el.style.animation = ''; });
+          el.style.animation = "none";
+          requestAnimationFrame(() => {
+            el.style.animation = "";
+          });
+        }
+      }
+      // Update Architecture view lag
+      const archEl = $(`#archLag-${g.id}`);
+      if (archEl) {
+        const prev = parseInt(archEl.textContent) || 0;
+        if (prev !== g.lag) {
+          archEl.textContent = g.lag;
+          archEl.classList.toggle("lag-high", g.lag > 20);
         }
       }
     });
@@ -410,44 +509,50 @@ setInterval(async () => {
 // ─── Producer Controls ────────────────────────────────────────────────────────
 
 function initProducerControls() {
-  const toggle = $('#producerToggle');
-  const speed = $('#speedSlider');
-  const batch = $('#batchSlider');
+  const toggle = $("#producerToggle");
+  const speed = $("#speedSlider");
+  const batch = $("#batchSlider");
 
-  toggle.addEventListener('change', () => {
+  toggle.addEventListener("change", () => {
     state.producerConfig.running = toggle.checked;
-    $('#producerStatusHint').textContent = toggle.checked ? 'Running' : 'Paused';
-    postJSON('./api/producer/config', { running: toggle.checked });
+    $("#producerStatusHint").textContent = toggle.checked
+      ? "Running"
+      : "Paused";
+    postJSON("./api/producer/config", { running: toggle.checked });
   });
 
-  speed.addEventListener('input', () => {
+  speed.addEventListener("input", () => {
     const val = parseInt(speed.value);
-    $('#speedHint').textContent = val + 'ms';
+    $("#speedHint").textContent = val + "ms";
     state.producerConfig.speed = val;
   });
-  speed.addEventListener('change', () => {
-    postJSON('./api/producer/config', { speed: parseInt(speed.value) });
+  speed.addEventListener("change", () => {
+    postJSON("./api/producer/config", { speed: parseInt(speed.value) });
   });
 
-  batch.addEventListener('input', () => {
+  batch.addEventListener("input", () => {
     const val = parseInt(batch.value);
-    $('#batchHint').textContent = val + ' msgs';
+    $("#batchHint").textContent = val + " msgs";
     state.producerConfig.batchSize = val;
   });
-  batch.addEventListener('change', () => {
-    postJSON('./api/producer/config', { batchSize: parseInt(batch.value) });
+  batch.addEventListener("change", () => {
+    postJSON("./api/producer/config", { batchSize: parseInt(batch.value) });
   });
 
-  $('#sendManualBtn').addEventListener('click', async () => {
-    const topic = $('#manualTopic').value;
-    const level = $('#manualLevel').value;
-    const message = $('#manualMessage').value.trim();
+  $("#sendManualBtn").addEventListener("click", async () => {
+    const topic = $("#manualTopic").value;
+    const level = $("#manualLevel").value;
+    const message = $("#manualMessage").value.trim();
 
     try {
-      await postJSON('./api/produce', { topic, level, value: message || undefined });
-      $('#manualMessage').value = '';
+      await postJSON("./api/produce", {
+        topic,
+        level,
+        value: message || undefined,
+      });
+      $("#manualMessage").value = "";
     } catch (e) {
-      showToast('Failed to produce message', 'error');
+      showToast("Failed to produce message", "error");
     }
   });
 }
@@ -455,16 +560,16 @@ function initProducerControls() {
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 function initNavigation() {
-  $$('.nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
+  $$(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
       const view = btn.dataset.view;
-      $$('.nav-item').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      $$('.view').forEach((v) => v.classList.remove('active'));
-      $(`#view-${view}`).classList.add('active');
+      $$(".nav-item").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      $$(".view").forEach((v) => v.classList.remove("active"));
+      $(`#view-${view}`).classList.add("active");
 
-      if (view === 'topics') renderTopics();
-      if (view === 'consumers') renderConsumers();
+      if (view === "topics") renderTopics();
+      if (view === "consumers") renderConsumers();
     });
   });
 }
@@ -472,97 +577,115 @@ function initNavigation() {
 // ─── Stream Controls ──────────────────────────────────────────────────────────
 
 function initStreamControls() {
-  $('#clearStreamBtn').addEventListener('click', () => {
-    els.logStream.innerHTML = '<div class="stream-empty"><p>Stream cleared</p></div>';
+  $("#clearStreamBtn").addEventListener("click", () => {
+    els.logStream.innerHTML =
+      '<div class="stream-empty"><p>Stream cleared</p></div>';
     state.messages = [];
   });
 
-  const pauseBtn = $('#pauseStreamBtn');
-  pauseBtn.addEventListener('click', () => {
+  const pauseBtn = $("#pauseStreamBtn");
+  pauseBtn.addEventListener("click", () => {
     state.paused = !state.paused;
     if (state.paused) {
-      pauseBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume';
+      pauseBtn.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume';
     } else {
-      pauseBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause';
+      pauseBtn.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause';
     }
   });
 
-  els.streamTopicFilter.addEventListener('change', () => replayStream());
-  els.streamLevelFilter.addEventListener('change', () => replayStream());
+  els.streamTopicFilter.addEventListener("change", () => replayStream());
+  els.streamLevelFilter.addEventListener("change", () => replayStream());
 }
 
 function replayStream() {
   if (!state.messages.length) return;
-  els.logStream.innerHTML = '';
+  els.logStream.innerHTML = "";
   const tf = els.streamTopicFilter.value;
   const lf = els.streamLevelFilter.value;
-  const filtered = state.messages.filter((m) => {
-    const level = (m.value || {}).level || 'INFO';
-    return (tf === 'all' || m.topic === tf) && (lf === 'all' || level === lf);
-  }).slice(0, 200);
+  const filtered = state.messages
+    .filter((m) => {
+      const level = (m.value || {}).level || "INFO";
+      return (tf === "all" || m.topic === tf) && (lf === "all" || level === lf);
+    })
+    .slice(0, 200);
   filtered.forEach((m) => prependStreamEntry(m, false));
 }
 
 // ─── Topics Management ────────────────────────────────────────────────────────
 
 function initTopicsManagement() {
-  $('#newTopicBtn').addEventListener('click', () => {
-    els.topicModal.classList.remove('hidden');
-    $('#topicNameInput').focus();
+  $("#newTopicBtn").addEventListener("click", () => {
+    els.topicModal.classList.remove("hidden");
+    $("#topicNameInput").focus();
   });
 
-  $('#closeTopicModal, #cancelTopicModal').forEach
-    ? $$('#closeTopicModal, #cancelTopicModal').forEach((b) => b.addEventListener('click', closeTopicModal))
+  $("#closeTopicModal, #cancelTopicModal").forEach
+    ? $$("#closeTopicModal, #cancelTopicModal").forEach((b) =>
+        b.addEventListener("click", closeTopicModal),
+      )
     : null;
 
-  $('#confirmCreateTopic').addEventListener('click', async () => {
-    const name = $('#topicNameInput').value.trim();
+  $("#confirmCreateTopic").addEventListener("click", async () => {
+    const name = $("#topicNameInput").value.trim();
     if (!name) return;
-    const partitions = parseInt($('#topicPartitions').value) || 3;
-    const replicationFactor = parseInt($('#topicReplication').value) || 1;
+    const partitions = parseInt($("#topicPartitions").value) || 3;
+    const replicationFactor = parseInt($("#topicReplication").value) || 1;
     try {
-      await postJSON('./api/topics', { name, partitions, replicationFactor });
+      await postJSON("./api/topics", { name, partitions, replicationFactor });
       closeTopicModal();
-      $('#topicNameInput').value = '';
+      $("#topicNameInput").value = "";
     } catch (e) {
-      showToast(e.message || 'Failed to create topic', 'error');
+      showToast(e.message || "Failed to create topic", "error");
     }
   });
 
   // Delete topic via event delegation
-  els.topicsGrid.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-delete-topic]');
+  els.topicsGrid.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-delete-topic]");
     if (!btn) return;
     const name = btn.dataset.deleteTopic;
     if (!confirm(`Delete topic "${name}"?`)) return;
     try {
-      await fetch(`./api/topics/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      await fetch(`./api/topics/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
     } catch (e) {
-      showToast('Failed to delete topic', 'error');
+      showToast("Failed to delete topic", "error");
     }
   });
 
   // Close modal on overlay click
-  els.topicModal.addEventListener('click', (e) => {
+  els.topicModal.addEventListener("click", (e) => {
     if (e.target === els.topicModal) closeTopicModal();
   });
 }
 
 function closeTopicModal() {
-  els.topicModal.classList.add('hidden');
+  els.topicModal.classList.add("hidden");
 }
 
 function populateTopicFilters() {
   const sel = els.streamTopicFilter;
   const current = sel.value;
-  sel.innerHTML = '<option value="all">All Topics</option>' +
-    state.topics.map((t) => `<option value="${escapeHtml(t.name)}" ${t.name === current ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+  sel.innerHTML =
+    '<option value="all">All Topics</option>' +
+    state.topics
+      .map(
+        (t) =>
+          `<option value="${escapeHtml(t.name)}" ${t.name === current ? "selected" : ""}>${escapeHtml(t.name)}</option>`,
+      )
+      .join("");
 
-  const manualTopic = $('#manualTopic');
+  const manualTopic = $("#manualTopic");
   const mCurrent = manualTopic.value;
-  manualTopic.innerHTML = state.topics.map((t) =>
-    `<option value="${escapeHtml(t.name)}" ${t.name === mCurrent ? 'selected' : ''}>${escapeHtml(t.name)}</option>`
-  ).join('');
+  manualTopic.innerHTML = state.topics
+    .map(
+      (t) =>
+        `<option value="${escapeHtml(t.name)}" ${t.name === mCurrent ? "selected" : ""}>${escapeHtml(t.name)}</option>`,
+    )
+    .join("");
 }
 
 // ─── Uptime ticker ────────────────────────────────────────────────────────────
@@ -578,53 +701,64 @@ function formatUptime(secs) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
-  els.uptimeDisplay.textContent = h > 0
-    ? `${h}h ${m}m`
-    : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  els.uptimeDisplay.textContent =
+    h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 // ─── Theme Toggle ─────────────────────────────────────────────────────────────
 
 function initTheme() {
-  const btn = $('[data-theme-toggle]');
+  const btn = $("[data-theme-toggle]");
   const html = document.documentElement;
-  let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  html.setAttribute('data-theme', theme);
+  let theme = matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+  html.setAttribute("data-theme", theme);
   updateThemeIcon(btn, theme);
-  btn.addEventListener('click', () => {
-    theme = theme === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', theme);
+  btn.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    html.setAttribute("data-theme", theme);
     updateThemeIcon(btn, theme);
   });
 }
 function updateThemeIcon(btn, theme) {
-  btn.innerHTML = theme === 'dark'
-    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
-    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+  btn.innerHTML =
+    theme === "dark"
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
 function formatTime(ts) {
   const d = new Date(ts);
-  return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function formatNumber(n) {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return String(n);
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 // Animate number counter
 const numAnimations = new WeakMap();
 function animateNumber(el, target) {
   if (!el) return;
-  const current = parseInt(el.textContent.replace(/[KM,]/g, '')) || 0;
+  const current = parseInt(el.textContent.replace(/[KM,]/g, "")) || 0;
   if (current === target) return;
   const diff = target - current;
   const duration = Math.min(800, Math.max(200, Math.abs(diff) * 2));
@@ -649,32 +783,32 @@ function animateNumber(el, target) {
 async function fetchJSON(url) {
   const res = await fetch(url);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || 'Request failed');
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(err.error || "Request failed");
   }
   return res.json();
 }
 
 async function postJSON(url, data) {
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || 'Request failed');
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(err.error || "Request failed");
   }
   return res.json();
 }
 
 // Toast notifications
-const toastContainer = document.createElement('div');
-toastContainer.className = 'toast-container';
+const toastContainer = document.createElement("div");
+toastContainer.className = "toast-container";
 document.body.appendChild(toastContainer);
 
-function showToast(message, type = 'info') {
-  const toast = document.createElement('div');
+function showToast(message, type = "info") {
+  const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   toast.textContent = message;
   toastContainer.appendChild(toast);
@@ -693,4 +827,4 @@ function init() {
   connectSSE();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener("DOMContentLoaded", init);

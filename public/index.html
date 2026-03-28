@@ -1,317 +1,1307 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KafkaStream — Real-Time Log Processing Demo</title>
-  <meta name="description" content="Apache Kafka producer-consumer real-time log processing dashboard demo" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="app">
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="KafkaStream">
-            <rect x="2" y="2" width="10" height="10" rx="2" fill="var(--accent)"/>
-            <rect x="16" y="2" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.6"/>
-            <rect x="2" y="16" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.4"/>
-            <rect x="16" y="16" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.8"/>
-            <line x1="12" y1="7" x2="16" y2="7" stroke="var(--accent)" stroke-width="1.5"/>
-            <line x1="12" y1="21" x2="16" y2="21" stroke="var(--accent)" stroke-width="1.5"/>
-            <line x1="7" y1="12" x2="7" y2="16" stroke="var(--accent)" stroke-width="1.5"/>
-            <line x1="21" y1="12" x2="21" y2="16" stroke="var(--accent)" stroke-width="1.5"/>
-          </svg>
-          <span class="logo-text">KafkaStream</span>
-        </div>
-        <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-      </div>
-
-      <nav class="sidebar-nav">
-        <div class="nav-section-label">Dashboard</div>
-        <button class="nav-item active" data-view="overview">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          Overview
-        </button>
-        <button class="nav-item" data-view="stream">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          Live Stream
-        </button>
-        <button class="nav-item" data-view="topics">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-          Topics
-        </button>
-        <button class="nav-item" data-view="consumers">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Consumers
-        </button>
-        <button class="nav-item" data-view="producer">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Producer
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="connection-badge" id="connectionBadge">
-          <span class="conn-dot"></span>
-          <span class="conn-label">Connecting...</span>
-        </div>
-        <div class="uptime-display">
-          <span class="uptime-label">Uptime</span>
-          <span class="uptime-value mono" id="uptimeDisplay">0s</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main" id="mainContent">
-
-      <!-- Overview View -->
-      <div class="view active" id="view-overview">
-        <div class="page-header">
-          <h1>Overview</h1>
-          <div class="header-actions">
-            <div class="live-indicator" id="liveIndicator">
-              <span class="live-dot"></span>
-              <span>LIVE</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- KPI Cards -->
-        <div class="kpi-grid">
-          <div class="kpi-card" data-testid="kpi-produced">
-            <div class="kpi-label">Messages Produced</div>
-            <div class="kpi-value mono" id="kpiProduced">0</div>
-            <div class="kpi-sub">Total across all topics</div>
-          </div>
-          <div class="kpi-card" data-testid="kpi-consumed">
-            <div class="kpi-label">Messages Consumed</div>
-            <div class="kpi-value mono" id="kpiConsumed">0</div>
-            <div class="kpi-sub">By all consumer groups</div>
-          </div>
-          <div class="kpi-card" data-testid="kpi-throughput">
-            <div class="kpi-label">Throughput</div>
-            <div class="kpi-value mono" id="kpiThroughput">0</div>
-            <div class="kpi-sub">messages / second</div>
-          </div>
-          <div class="kpi-card" data-testid="kpi-topics">
-            <div class="kpi-label">Active Topics</div>
-            <div class="kpi-value mono" id="kpiTopics">0</div>
-            <div class="kpi-sub">Partitioned topics</div>
-          </div>
-        </div>
-
-        <!-- Throughput Chart -->
-        <div class="section-card">
-          <div class="section-header">
-            <h2>Throughput (msgs/sec)</h2>
-            <span class="section-badge" id="currentThroughputBadge">0 msg/s</span>
-          </div>
-          <canvas id="throughputChart" height="120"></canvas>
-        </div>
-
-        <!-- Log Level Distribution -->
-        <div class="two-col">
-          <div class="section-card">
-            <div class="section-header"><h2>Log Level Distribution</h2></div>
-            <div class="level-bars" id="levelBars">
-              <div class="level-bar-row"><span class="level-badge debug">DEBUG</span><div class="bar-track"><div class="bar-fill" data-level="DEBUG" style="width:0%"></div></div><span class="bar-count mono" data-count="DEBUG">0</span></div>
-              <div class="level-bar-row"><span class="level-badge info">INFO</span><div class="bar-track"><div class="bar-fill" data-level="INFO" style="width:0%"></div></div><span class="bar-count mono" data-count="INFO">0</span></div>
-              <div class="level-bar-row"><span class="level-badge warn">WARN</span><div class="bar-track"><div class="bar-fill" data-level="WARN" style="width:0%"></div></div><span class="bar-count mono" data-count="WARN">0</span></div>
-              <div class="level-bar-row"><span class="level-badge error">ERROR</span><div class="bar-track"><div class="bar-fill" data-level="ERROR" style="width:0%"></div></div><span class="bar-count mono" data-count="ERROR">0</span></div>
-              <div class="level-bar-row"><span class="level-badge fatal">FATAL</span><div class="bar-track"><div class="bar-fill" data-level="FATAL" style="width:0%"></div></div><span class="bar-count mono" data-count="FATAL">0</span></div>
-            </div>
-          </div>
-          <div class="section-card">
-            <div class="section-header"><h2>Top Services</h2></div>
-            <div class="service-list" id="serviceList">
-              <div class="empty-state">Waiting for data...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Live Stream View -->
-      <div class="view" id="view-stream">
-        <div class="page-header">
-          <h1>Live Stream</h1>
-          <div class="header-actions">
-            <div class="filter-bar">
-              <select id="streamTopicFilter" class="filter-select">
-                <option value="all">All Topics</option>
-              </select>
-              <select id="streamLevelFilter" class="filter-select">
-                <option value="all">All Levels</option>
-                <option value="DEBUG">DEBUG</option>
-                <option value="INFO">INFO</option>
-                <option value="WARN">WARN</option>
-                <option value="ERROR">ERROR</option>
-                <option value="FATAL">FATAL</option>
-              </select>
-              <button class="btn btn-ghost" id="clearStreamBtn">Clear</button>
-              <button class="btn btn-ghost" id="pauseStreamBtn">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                Pause
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="log-stream-container" id="logStream">
-          <div class="stream-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            <p>Connecting to stream...</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Topics View -->
-      <div class="view" id="view-topics">
-        <div class="page-header">
-          <h1>Topics</h1>
-          <button class="btn btn-primary" id="newTopicBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Topic
-          </button>
-        </div>
-
-        <div class="topics-grid" id="topicsGrid">
-          <!-- Filled by JS -->
-        </div>
-
-        <!-- Create Topic Modal -->
-        <div class="modal-overlay hidden" id="topicModal">
-          <div class="modal">
-            <div class="modal-header">
-              <h3>Create Topic</h3>
-              <button class="btn-icon" id="closeTopicModal">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="modal-body">
-              <div class="form-group">
-                <label class="form-label">Topic Name</label>
-                <input type="text" id="topicNameInput" class="form-input" placeholder="e.g. user-events" />
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Partitions</label>
-                  <input type="number" id="topicPartitions" class="form-input" value="3" min="1" max="20" />
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>KafkaStream — Real-Time Log Processing Demo</title>
+        <meta
+            name="description"
+            content="Apache Kafka producer-consumer real-time log processing dashboard demo"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div class="app">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">
+                        <svg
+                            width="28"
+                            height="28"
+                            viewBox="0 0 28 28"
+                            fill="none"
+                            aria-label="KafkaStream"
+                        >
+                            <rect
+                                x="2"
+                                y="2"
+                                width="10"
+                                height="10"
+                                rx="2"
+                                fill="var(--accent)"
+                            />
+                            <rect
+                                x="16"
+                                y="2"
+                                width="10"
+                                height="10"
+                                rx="2"
+                                fill="var(--accent)"
+                                opacity="0.6"
+                            />
+                            <rect
+                                x="2"
+                                y="16"
+                                width="10"
+                                height="10"
+                                rx="2"
+                                fill="var(--accent)"
+                                opacity="0.4"
+                            />
+                            <rect
+                                x="16"
+                                y="16"
+                                width="10"
+                                height="10"
+                                rx="2"
+                                fill="var(--accent)"
+                                opacity="0.8"
+                            />
+                            <line
+                                x1="12"
+                                y1="7"
+                                x2="16"
+                                y2="7"
+                                stroke="var(--accent)"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                x1="12"
+                                y1="21"
+                                x2="16"
+                                y2="21"
+                                stroke="var(--accent)"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                x1="7"
+                                y1="12"
+                                x2="7"
+                                y2="16"
+                                stroke="var(--accent)"
+                                stroke-width="1.5"
+                            />
+                            <line
+                                x1="21"
+                                y1="12"
+                                x2="21"
+                                y2="16"
+                                stroke="var(--accent)"
+                                stroke-width="1.5"
+                            />
+                        </svg>
+                        <span class="logo-text">KafkaStream</span>
+                    </div>
+                    <button
+                        class="theme-toggle"
+                        data-theme-toggle
+                        aria-label="Toggle theme"
+                        title="Toggle theme"
+                    >
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <path
+                                d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+                            />
+                        </svg>
+                    </button>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Replication Factor</label>
-                  <input type="number" id="topicReplication" class="form-input" value="1" min="1" max="3" />
+
+                <nav class="sidebar-nav">
+                    <div class="nav-section-label">Dashboard</div>
+                    <button class="nav-item active" data-view="overview">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        Overview
+                    </button>
+                    <button class="nav-item" data-view="stream">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <polyline
+                                points="22 12 18 12 15 21 9 3 6 12 2 12"
+                            />
+                        </svg>
+                        Live Stream
+                    </button>
+                    <button class="nav-item" data-view="topics">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <ellipse cx="12" cy="5" rx="9" ry="3" />
+                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                        </svg>
+                        Topics
+                    </button>
+                    <button class="nav-item" data-view="consumers">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <path
+                                d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                            />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Consumers
+                    </button>
+                    <button class="nav-item" data-view="producer">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                        Producer
+                    </button>
+                    <div class="nav-section-label" style="margin-top: 14px">
+                        Edukasi
+                    </div>
+                    <button class="nav-item" data-view="architecture">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <rect x="2" y="3" width="8" height="8" rx="1" />
+                            <rect x="14" y="3" width="8" height="8" rx="1" />
+                            <rect x="8" y="13" width="8" height="8" rx="1" />
+                            <line x1="6" y1="11" x2="6" y2="13" />
+                            <line x1="18" y1="11" x2="18" y2="13" />
+                            <line x1="6" y1="13" x2="12" y2="13" />
+                            <line x1="18" y1="13" x2="12" y2="13" />
+                        </svg>
+                        Architecture
+                    </button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="connection-badge" id="connectionBadge">
+                        <span class="conn-dot"></span>
+                        <span class="conn-label">Connecting...</span>
+                    </div>
+                    <div class="uptime-display">
+                        <span class="uptime-label">Uptime</span>
+                        <span class="uptime-value mono" id="uptimeDisplay"
+                            >0s</span
+                        >
+                    </div>
                 </div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button class="btn btn-ghost" id="cancelTopicModal">Cancel</button>
-              <button class="btn btn-primary" id="confirmCreateTopic">Create Topic</button>
-            </div>
-          </div>
-        </div>
-      </div>
+            </aside>
 
-      <!-- Consumers View -->
-      <div class="view" id="view-consumers">
-        <div class="page-header">
-          <h1>Consumer Groups</h1>
-        </div>
+            <!-- Main Content -->
+            <main class="main" id="mainContent">
+                <!-- Overview View -->
+                <div class="view active" id="view-overview">
+                    <div class="page-header">
+                        <h1>Overview</h1>
+                        <div class="header-actions">
+                            <div class="live-indicator" id="liveIndicator">
+                                <span class="live-dot"></span>
+                                <span>LIVE</span>
+                            </div>
+                        </div>
+                    </div>
 
-        <div class="consumers-list" id="consumersList">
-          <!-- Filled by JS -->
-        </div>
-      </div>
+                    <!-- KPI Cards -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card" data-testid="kpi-produced">
+                            <div class="kpi-label">Messages Produced</div>
+                            <div class="kpi-value mono" id="kpiProduced">0</div>
+                            <div class="kpi-sub">Total across all topics</div>
+                        </div>
+                        <div class="kpi-card" data-testid="kpi-consumed">
+                            <div class="kpi-label">Messages Consumed</div>
+                            <div class="kpi-value mono" id="kpiConsumed">0</div>
+                            <div class="kpi-sub">By all consumer groups</div>
+                        </div>
+                        <div class="kpi-card" data-testid="kpi-throughput">
+                            <div class="kpi-label">Throughput</div>
+                            <div class="kpi-value mono" id="kpiThroughput">
+                                0
+                            </div>
+                            <div class="kpi-sub">messages / second</div>
+                        </div>
+                        <div class="kpi-card" data-testid="kpi-topics">
+                            <div class="kpi-label">Active Topics</div>
+                            <div class="kpi-value mono" id="kpiTopics">0</div>
+                            <div class="kpi-sub">Partitioned topics</div>
+                        </div>
+                    </div>
 
-      <!-- Producer View -->
-      <div class="view" id="view-producer">
-        <div class="page-header">
-          <h1>Producer Control</h1>
-        </div>
+                    <!-- Throughput Chart -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>Throughput (msgs/sec)</h2>
+                            <span
+                                class="section-badge"
+                                id="currentThroughputBadge"
+                                >0 msg/s</span
+                            >
+                        </div>
+                        <canvas id="throughputChart" height="120"></canvas>
+                    </div>
 
-        <div class="two-col">
-          <div class="section-card">
-            <div class="section-header"><h2>Auto-Producer Settings</h2></div>
-            <div class="producer-controls">
-              <div class="control-row">
-                <div class="control-label">
-                  <span>Status</span>
-                  <span class="control-hint" id="producerStatusHint">Running</span>
+                    <!-- Log Level Distribution -->
+                    <div class="two-col">
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h2>Log Level Distribution</h2>
+                            </div>
+                            <div class="level-bars" id="levelBars">
+                                <div class="level-bar-row">
+                                    <span class="level-badge debug">DEBUG</span>
+                                    <div class="bar-track">
+                                        <div
+                                            class="bar-fill"
+                                            data-level="DEBUG"
+                                            style="width: 0%"
+                                        ></div>
+                                    </div>
+                                    <span
+                                        class="bar-count mono"
+                                        data-count="DEBUG"
+                                        >0</span
+                                    >
+                                </div>
+                                <div class="level-bar-row">
+                                    <span class="level-badge info">INFO</span>
+                                    <div class="bar-track">
+                                        <div
+                                            class="bar-fill"
+                                            data-level="INFO"
+                                            style="width: 0%"
+                                        ></div>
+                                    </div>
+                                    <span
+                                        class="bar-count mono"
+                                        data-count="INFO"
+                                        >0</span
+                                    >
+                                </div>
+                                <div class="level-bar-row">
+                                    <span class="level-badge warn">WARN</span>
+                                    <div class="bar-track">
+                                        <div
+                                            class="bar-fill"
+                                            data-level="WARN"
+                                            style="width: 0%"
+                                        ></div>
+                                    </div>
+                                    <span
+                                        class="bar-count mono"
+                                        data-count="WARN"
+                                        >0</span
+                                    >
+                                </div>
+                                <div class="level-bar-row">
+                                    <span class="level-badge error">ERROR</span>
+                                    <div class="bar-track">
+                                        <div
+                                            class="bar-fill"
+                                            data-level="ERROR"
+                                            style="width: 0%"
+                                        ></div>
+                                    </div>
+                                    <span
+                                        class="bar-count mono"
+                                        data-count="ERROR"
+                                        >0</span
+                                    >
+                                </div>
+                                <div class="level-bar-row">
+                                    <span class="level-badge fatal">FATAL</span>
+                                    <div class="bar-track">
+                                        <div
+                                            class="bar-fill"
+                                            data-level="FATAL"
+                                            style="width: 0%"
+                                        ></div>
+                                    </div>
+                                    <span
+                                        class="bar-count mono"
+                                        data-count="FATAL"
+                                        >0</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h2>Top Services</h2>
+                            </div>
+                            <div class="service-list" id="serviceList">
+                                <div class="empty-state">
+                                    Waiting for data...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="producerToggle" checked />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-              <div class="control-row">
-                <div class="control-label">
-                  <span>Speed</span>
-                  <span class="control-hint mono" id="speedHint">1000ms</span>
-                </div>
-                <input type="range" id="speedSlider" min="100" max="5000" value="1000" step="100" class="slider" />
-              </div>
-              <div class="control-row">
-                <div class="control-label">
-                  <span>Batch Size</span>
-                  <span class="control-hint mono" id="batchHint">3 msgs</span>
-                </div>
-                <input type="range" id="batchSlider" min="1" max="20" value="3" step="1" class="slider" />
-              </div>
-            </div>
-          </div>
 
-          <div class="section-card">
-            <div class="section-header"><h2>Manual Produce</h2></div>
-            <div class="manual-produce-form">
-              <div class="form-group">
-                <label class="form-label">Topic</label>
-                <select id="manualTopic" class="form-input">
-                  <option value="app-logs">app-logs</option>
-                  <option value="error-logs">error-logs</option>
-                  <option value="audit-events">audit-events</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Log Level</label>
-                <select id="manualLevel" class="form-input">
-                  <option value="INFO">INFO</option>
-                  <option value="DEBUG">DEBUG</option>
-                  <option value="WARN">WARN</option>
-                  <option value="ERROR">ERROR</option>
-                  <option value="FATAL">FATAL</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Message</label>
-                <textarea id="manualMessage" class="form-input form-textarea" placeholder="Leave empty for auto-generated message..."></textarea>
-              </div>
-              <button class="btn btn-primary full-width" id="sendManualBtn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                Produce Message
-              </button>
-            </div>
-          </div>
+                <!-- Live Stream View -->
+                <div class="view" id="view-stream">
+                    <div class="page-header">
+                        <h1>Live Stream</h1>
+                        <div class="header-actions">
+                            <div class="filter-bar">
+                                <select
+                                    id="streamTopicFilter"
+                                    class="filter-select"
+                                >
+                                    <option value="all">All Topics</option>
+                                </select>
+                                <select
+                                    id="streamLevelFilter"
+                                    class="filter-select"
+                                >
+                                    <option value="all">All Levels</option>
+                                    <option value="DEBUG">DEBUG</option>
+                                    <option value="INFO">INFO</option>
+                                    <option value="WARN">WARN</option>
+                                    <option value="ERROR">ERROR</option>
+                                    <option value="FATAL">FATAL</option>
+                                </select>
+                                <button
+                                    class="btn btn-ghost"
+                                    id="clearStreamBtn"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    class="btn btn-ghost"
+                                    id="pauseStreamBtn"
+                                >
+                                    <svg
+                                        width="12"
+                                        height="12"
+                                        viewBox="0 0 24 24"
+                                        fill="currentColor"
+                                    >
+                                        <rect
+                                            x="6"
+                                            y="4"
+                                            width="4"
+                                            height="16"
+                                        />
+                                        <rect
+                                            x="14"
+                                            y="4"
+                                            width="4"
+                                            height="16"
+                                        />
+                                    </svg>
+                                    Pause
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="log-stream-container" id="logStream">
+                        <div class="stream-empty">
+                            <svg
+                                width="48"
+                                height="48"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1"
+                                opacity="0.3"
+                            >
+                                <polyline
+                                    points="22 12 18 12 15 21 9 3 6 12 2 12"
+                                />
+                            </svg>
+                            <p>Connecting to stream...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Topics View -->
+                <div class="view" id="view-topics">
+                    <div class="page-header">
+                        <h1>Topics</h1>
+                        <button class="btn btn-primary" id="newTopicBtn">
+                            <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                            >
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            New Topic
+                        </button>
+                    </div>
+
+                    <div class="topics-grid" id="topicsGrid">
+                        <!-- Filled by JS -->
+                    </div>
+
+                    <!-- Create Topic Modal -->
+                    <div class="modal-overlay hidden" id="topicModal">
+                        <div class="modal">
+                            <div class="modal-header">
+                                <h3>Create Topic</h3>
+                                <button class="btn-icon" id="closeTopicModal">
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label class="form-label">Topic Name</label>
+                                    <input
+                                        type="text"
+                                        id="topicNameInput"
+                                        class="form-input"
+                                        placeholder="e.g. user-events"
+                                    />
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label"
+                                            >Partitions</label
+                                        >
+                                        <input
+                                            type="number"
+                                            id="topicPartitions"
+                                            class="form-input"
+                                            value="3"
+                                            min="1"
+                                            max="20"
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label"
+                                            >Replication Factor</label
+                                        >
+                                        <input
+                                            type="number"
+                                            id="topicReplication"
+                                            class="form-input"
+                                            value="1"
+                                            min="1"
+                                            max="3"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button
+                                    class="btn btn-ghost"
+                                    id="cancelTopicModal"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    class="btn btn-primary"
+                                    id="confirmCreateTopic"
+                                >
+                                    Create Topic
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Consumers View -->
+                <div class="view" id="view-consumers">
+                    <div class="page-header">
+                        <h1>Consumer Groups</h1>
+                    </div>
+
+                    <div class="consumers-list" id="consumersList">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+
+                <!-- Producer View -->
+                <div class="view" id="view-producer">
+                    <div class="page-header">
+                        <h1>Producer Control</h1>
+                    </div>
+
+                    <div class="two-col">
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h2>Auto-Producer Settings</h2>
+                            </div>
+                            <div class="producer-controls">
+                                <div class="control-row">
+                                    <div class="control-label">
+                                        <span>Status</span>
+                                        <span
+                                            class="control-hint"
+                                            id="producerStatusHint"
+                                            >Running</span
+                                        >
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input
+                                            type="checkbox"
+                                            id="producerToggle"
+                                            checked
+                                        />
+                                        <span class="toggle-track"></span>
+                                    </label>
+                                </div>
+                                <div class="control-row">
+                                    <div class="control-label">
+                                        <span>Speed</span>
+                                        <span
+                                            class="control-hint mono"
+                                            id="speedHint"
+                                            >1000ms</span
+                                        >
+                                    </div>
+                                    <input
+                                        type="range"
+                                        id="speedSlider"
+                                        min="100"
+                                        max="5000"
+                                        value="1000"
+                                        step="100"
+                                        class="slider"
+                                    />
+                                </div>
+                                <div class="control-row">
+                                    <div class="control-label">
+                                        <span>Batch Size</span>
+                                        <span
+                                            class="control-hint mono"
+                                            id="batchHint"
+                                            >3 msgs</span
+                                        >
+                                    </div>
+                                    <input
+                                        type="range"
+                                        id="batchSlider"
+                                        min="1"
+                                        max="20"
+                                        value="3"
+                                        step="1"
+                                        class="slider"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h2>Manual Produce</h2>
+                            </div>
+                            <div class="manual-produce-form">
+                                <div class="form-group">
+                                    <label class="form-label">Topic</label>
+                                    <select id="manualTopic" class="form-input">
+                                        <option value="app-logs">
+                                            app-logs
+                                        </option>
+                                        <option value="error-logs">
+                                            error-logs
+                                        </option>
+                                        <option value="audit-events">
+                                            audit-events
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Log Level</label>
+                                    <select id="manualLevel" class="form-input">
+                                        <option value="INFO">INFO</option>
+                                        <option value="DEBUG">DEBUG</option>
+                                        <option value="WARN">WARN</option>
+                                        <option value="ERROR">ERROR</option>
+                                        <option value="FATAL">FATAL</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Message</label>
+                                    <textarea
+                                        id="manualMessage"
+                                        class="form-input form-textarea"
+                                        placeholder="Leave empty for auto-generated message..."
+                                    ></textarea>
+                                </div>
+                                <button
+                                    class="btn btn-primary full-width"
+                                    id="sendManualBtn"
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <polygon points="5 3 19 12 5 21 5 3" />
+                                    </svg>
+                                    Produce Message
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent produced messages -->
+                    <div class="section-card" style="margin-top: 1rem">
+                        <div class="section-header">
+                            <h2>Recently Produced</h2>
+                        </div>
+                        <div
+                            class="log-stream-container short"
+                            id="producerLog"
+                        >
+                            <div class="stream-empty">
+                                <p>No messages yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════════════════════════ -->
+                <!-- Architecture View                                                   -->
+                <!-- ═══════════════════════════════════════════════════════════════════ -->
+                <div class="view" id="view-architecture">
+                    <div class="page-header">
+                        <h1>Architecture</h1>
+                        <div class="header-actions">
+                            <div class="live-indicator">
+                                <span class="live-dot"></span>
+                                <span>LIVE</span>
+                            </div>
+                            <span class="section-badge" id="archThroughputBadge"
+                                >0 msg/s</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- ── Kafka Flow Diagram ─────────────────────────────────────────── -->
+                    <div class="section-card arch-card">
+                        <div class="section-header">
+                            <h2>Kafka Data Flow</h2>
+                            <span class="arch-legend">
+                                <span
+                                    class="arch-legend-dot"
+                                    style="background: var(--accent)"
+                                ></span>
+                                message flow
+                            </span>
+                        </div>
+
+                        <div class="arch-diagram">
+                            <!-- Producer Node -->
+                            <div class="arch-col arch-col-side">
+                                <div
+                                    class="arch-node arch-producer-node"
+                                    id="archProducerNode"
+                                >
+                                    <div
+                                        class="arch-node-icon"
+                                        style="
+                                            background: rgba(
+                                                240,
+                                                112,
+                                                48,
+                                                0.12
+                                            );
+                                            color: var(--accent);
+                                        "
+                                    >
+                                        <svg
+                                            width="22"
+                                            height="22"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <polygon
+                                                points="5 3 19 12 5 21 5 3"
+                                            />
+                                        </svg>
+                                    </div>
+                                    <div class="arch-node-title">Producer</div>
+                                    <div class="arch-node-file">
+                                        kafka-producer.js
+                                    </div>
+                                    <div
+                                        class="arch-node-badge"
+                                        id="archStatProduced"
+                                    >
+                                        0 msgs
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Arrow 1: Producer → Broker -->
+                            <div class="arch-arrow-col">
+                                <div class="arch-arrow-label">publish</div>
+                                <div class="arch-arrow-track">
+                                    <span class="arch-particle arch-p1"></span>
+                                    <span class="arch-particle arch-p2"></span>
+                                    <span class="arch-particle arch-p3"></span>
+                                    <div class="arch-arrow-line"></div>
+                                    <div class="arch-arrowhead">▶</div>
+                                </div>
+                                <div class="arch-arrow-hint">
+                                    key-based partitioning
+                                </div>
+                            </div>
+
+                            <!-- Broker Box -->
+                            <div class="arch-col arch-col-broker">
+                                <div class="arch-broker-box">
+                                    <div class="arch-broker-header">
+                                        <svg
+                                            width="13"
+                                            height="13"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <ellipse
+                                                cx="12"
+                                                cy="5"
+                                                rx="9"
+                                                ry="3"
+                                            />
+                                            <path
+                                                d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"
+                                            />
+                                            <path
+                                                d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"
+                                            />
+                                        </svg>
+                                        Apache Kafka Broker
+                                    </div>
+                                    <div class="arch-broker-body">
+                                        <div class="arch-topic-row">
+                                            <div class="arch-topic-name">
+                                                app-logs
+                                            </div>
+                                            <div class="arch-partitions">
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-app-logs-0"
+                                                    >P0</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-app-logs-1"
+                                                    >P1</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-app-logs-2"
+                                                    >P2</span
+                                                >
+                                            </div>
+                                        </div>
+                                        <div class="arch-topic-row">
+                                            <div class="arch-topic-name">
+                                                error-logs
+                                            </div>
+                                            <div class="arch-partitions">
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-error-logs-0"
+                                                    >P0</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-error-logs-1"
+                                                    >P1</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-error-logs-2"
+                                                    >P2</span
+                                                >
+                                            </div>
+                                        </div>
+                                        <div class="arch-topic-row">
+                                            <div class="arch-topic-name">
+                                                audit-events
+                                            </div>
+                                            <div class="arch-partitions">
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-audit-events-0"
+                                                    >P0</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-audit-events-1"
+                                                    >P1</span
+                                                >
+                                                <span
+                                                    class="arch-partition"
+                                                    id="ap-audit-events-2"
+                                                    >P2</span
+                                                >
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="arch-broker-footer">
+                                        <span id="archBrokerTotal">0</span>
+                                        total messages ·
+                                        <span id="archBrokerTopicCount">3</span>
+                                        topics
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Arrow 2: Broker → Consumers -->
+                            <div class="arch-arrow-col">
+                                <div class="arch-arrow-label">subscribe</div>
+                                <div class="arch-arrow-track">
+                                    <span
+                                        class="arch-particle arch-p1"
+                                        style="animation-delay: 0.4s"
+                                    ></span>
+                                    <span
+                                        class="arch-particle arch-p2"
+                                        style="animation-delay: 1.1s"
+                                    ></span>
+                                    <span
+                                        class="arch-particle arch-p3"
+                                        style="animation-delay: 1.8s"
+                                    ></span>
+                                    <div class="arch-arrow-line"></div>
+                                    <div class="arch-arrowhead">▶</div>
+                                </div>
+                                <div class="arch-arrow-hint">
+                                    offset tracking
+                                </div>
+                            </div>
+
+                            <!-- Consumer Groups -->
+                            <div class="arch-col arch-col-side">
+                                <div class="arch-consumers-col">
+                                    <div
+                                        class="arch-consumer-node"
+                                        id="archCg-log-aggregator"
+                                    >
+                                        <div
+                                            class="arch-consumer-icon"
+                                            style="
+                                                background: rgba(
+                                                    76,
+                                                    175,
+                                                    120,
+                                                    0.12
+                                                );
+                                                color: var(--info-color);
+                                            "
+                                        >
+                                            <svg
+                                                width="14"
+                                                height="14"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                                />
+                                                <circle cx="9" cy="7" r="4" />
+                                            </svg>
+                                        </div>
+                                        <div class="arch-consumer-info">
+                                            <div class="arch-consumer-id">
+                                                log-aggregator
+                                            </div>
+                                            <div class="arch-consumer-subs">
+                                                app-logs
+                                            </div>
+                                        </div>
+                                        <div
+                                            class="arch-consumer-lag"
+                                            id="archLag-log-aggregator"
+                                        >
+                                            0
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="arch-consumer-node"
+                                        id="archCg-error-monitor"
+                                    >
+                                        <div
+                                            class="arch-consumer-icon"
+                                            style="
+                                                background: rgba(
+                                                    224,
+                                                    64,
+                                                    96,
+                                                    0.12
+                                                );
+                                                color: var(--error-color);
+                                            "
+                                        >
+                                            <svg
+                                                width="14"
+                                                height="14"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                                />
+                                                <circle cx="9" cy="7" r="4" />
+                                            </svg>
+                                        </div>
+                                        <div class="arch-consumer-info">
+                                            <div class="arch-consumer-id">
+                                                error-monitor
+                                            </div>
+                                            <div class="arch-consumer-subs">
+                                                error-logs · audit-events
+                                            </div>
+                                        </div>
+                                        <div
+                                            class="arch-consumer-lag"
+                                            id="archLag-error-monitor"
+                                        >
+                                            0
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="arch-consumer-node"
+                                        id="archCg-audit-processor"
+                                    >
+                                        <div
+                                            class="arch-consumer-icon"
+                                            style="
+                                                background: rgba(
+                                                    240,
+                                                    160,
+                                                    48,
+                                                    0.12
+                                                );
+                                                color: var(--warn-color);
+                                            "
+                                        >
+                                            <svg
+                                                width="14"
+                                                height="14"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                                />
+                                                <circle cx="9" cy="7" r="4" />
+                                            </svg>
+                                        </div>
+                                        <div class="arch-consumer-info">
+                                            <div class="arch-consumer-id">
+                                                audit-processor
+                                            </div>
+                                            <div class="arch-consumer-subs">
+                                                audit-events
+                                            </div>
+                                        </div>
+                                        <div
+                                            class="arch-consumer-lag"
+                                            id="archLag-audit-processor"
+                                        >
+                                            0
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- /.arch-diagram -->
+                    </div>
+                    <!-- /.section-card -->
+
+                    <!-- ── Concept Cards ──────────────────────────────────────────────── -->
+                    <div class="section-header" style="margin-bottom: 12px">
+                        <h2>Konsep Utama Apache Kafka</h2>
+                    </div>
+                    <div class="concept-grid">
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(240, 112, 48, 0.12);
+                                    color: var(--accent);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                                    <path
+                                        d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"
+                                    />
+                                    <path
+                                        d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Broker</div>
+                                <div class="concept-desc">
+                                    Server pusat Kafka yang menerima, menyimpan,
+                                    dan melayani message. Satu cluster bisa
+                                    memiliki banyak broker untuk High
+                                    Availability dan fault tolerance.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(76, 138, 255, 0.12);
+                                    color: var(--debug-color);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <line x1="8" y1="6" x2="21" y2="6" />
+                                    <line x1="8" y1="12" x2="21" y2="12" />
+                                    <line x1="8" y1="18" x2="21" y2="18" />
+                                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Topic</div>
+                                <div class="concept-desc">
+                                    Kategori atau "saluran" tempat message
+                                    dipublish. Seperti nama folder atau channel.
+                                    Satu topic dibagi ke beberapa partisi untuk
+                                    distribusi beban.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(76, 175, 120, 0.12);
+                                    color: var(--info-color);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <rect
+                                        x="2"
+                                        y="3"
+                                        width="20"
+                                        height="18"
+                                        rx="2"
+                                    />
+                                    <line x1="8" y1="3" x2="8" y2="21" />
+                                    <line x1="16" y1="3" x2="16" y2="21" />
+                                    <line x1="2" y1="9" x2="22" y2="9" />
+                                    <line x1="2" y1="15" x2="22" y2="15" />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Partition</div>
+                                <div class="concept-desc">
+                                    Unit pembagi horizontal sebuah topic.
+                                    Message ditulis ke partisi tertentu
+                                    berdasarkan partition key. Memungkinkan
+                                    pemrosesan paralel dan horizontal scaling.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(240, 160, 48, 0.12);
+                                    color: var(--warn-color);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <polyline
+                                        points="22 12 18 12 15 21 9 3 6 12 2 12"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Offset</div>
+                                <div class="concept-desc">
+                                    Penanda posisi urutan message dalam partisi.
+                                    Consumer menyimpan offset terakhir yang
+                                    diproses. Mendukung replay data dari offset
+                                    mana saja bila dibutuhkan.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(192, 32, 160, 0.12);
+                                    color: var(--fatal-color);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Producer</div>
+                                <div class="concept-desc">
+                                    Aplikasi yang mempublish message ke topic
+                                    Kafka. Bisa menentukan partisi tujuan dengan
+                                    partition key. Mendukung batching dan
+                                    kompresi untuk performa tinggi.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-card">
+                            <div
+                                class="concept-icon"
+                                style="
+                                    background: rgba(224, 64, 96, 0.12);
+                                    color: var(--error-color);
+                                "
+                            >
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <path
+                                        d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                    />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                </svg>
+                            </div>
+                            <div class="concept-body">
+                                <div class="concept-title">Consumer Group</div>
+                                <div class="concept-desc">
+                                    Kumpulan consumer yang bekerja bersama
+                                    membaca satu topic. Setiap partisi hanya
+                                    dibaca oleh satu consumer per group —
+                                    memungkinkan load balancing otomatis.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /.concept-grid -->
+                </div>
+                <!-- /#view-architecture -->
+            </main>
         </div>
 
-        <!-- Recent produced messages -->
-        <div class="section-card" style="margin-top:1rem">
-          <div class="section-header"><h2>Recently Produced</h2></div>
-          <div class="log-stream-container short" id="producerLog">
-            <div class="stream-empty"><p>No messages yet</p></div>
-          </div>
-        </div>
-      </div>
-
-    </main>
-  </div>
-
-  <script src="app.js"></script>
-</body>
+        <script src="app.js"></script>
+    </body>
 </html>
