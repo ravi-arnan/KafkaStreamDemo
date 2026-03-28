@@ -1083,6 +1083,29 @@
                     </div>
                     <!-- /.section-card -->
 
+                    <!-- ── Partition Activity Heatmap ────────────────────────────────── -->
+                    <div class="section-card" style="margin-bottom: 16px">
+                        <div class="section-header">
+                            <h2>Partition Activity Heatmap</h2>
+                            <span class="section-badge" id="heatmapWindowBadge"
+                                >last 30s</span
+                            >
+                        </div>
+                        <div class="heatmap-wrap">
+                            <div class="heatmap-table" id="partitionHeatmap">
+                                <!-- header row -->
+                                <div class="heatmap-col-header"></div>
+                                <div class="heatmap-col-header">P0</div>
+                                <div class="heatmap-col-header">P1</div>
+                                <div class="heatmap-col-header">P2</div>
+                                <!-- rows filled by JS -->
+                                <div class="heatmap-empty" id="heatmapEmpty">
+                                    Menunggu data...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- ── Concept Cards ──────────────────────────────────────────────── -->
                     <div class="section-header" style="margin-bottom: 12px">
                         <h2>Konsep Utama Apache Kafka</h2>

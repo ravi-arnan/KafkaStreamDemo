@@ -313,12 +313,12 @@ async function autoProducer() {
       }
     }
 
-    // Simulate consumer processing (auto-consume from all topics)
+    // Simulate consumer processing (auto-consume, skip paused groups)
     ["app-logs", "error-logs", "audit-events"].forEach((t) => {
       if (broker.topics[t]) {
-        broker.consume(t, "log-aggregator", 100);
-        broker.consume(t, "error-monitor", 100);
-        broker.consume(t, "audit-processor", 100);
+        CONSUMER_GROUPS.forEach((g) => {
+          if (!pausedConsumers.has(g.id)) broker.consume(t, g.id, 100);
+        });
       }
     });
 
@@ -332,6 +332,7 @@ async function autoProducer() {
           throughput: broker.getThroughput(),
           uptime: Math.floor((Date.now() - broker.stats.startTime) / 1000),
         },
+        consumerLags: getConsumerLags(),
       });
     }
   }
@@ -341,6 +342,32 @@ async function autoProducer() {
 autoProducer().catch(console.error);
 
 // ─── Consumer groups ──────────────────────────────────────────────────────────
+
+// ─── Paused Consumer Groups ───────────────────────────────────────────────────
+
+const pausedConsumers = new Set();
+
+/**
+ * Compute lag + paused state for every consumer group.
+ * Returns: { [groupId]: { lag: number, paused: boolean } }
+ */
+function getConsumerLags() {
+  const result = {};
+  CONSUMER_GROUPS.forEach((g) => {
+    const lag = g.topics.reduce((total, topicName) => {
+      const topic = broker.topics[topicName];
+      if (!topic) return total;
+      const committed = broker.consumerGroups[g.id] || {};
+      topic.partitions.forEach((p, i) => {
+        const committedOffset = committed[`${topicName}:${i}`] || 0;
+        total += Math.max(0, p.offset - committedOffset);
+      });
+      return total;
+    }, 0);
+    result[g.id] = { lag, paused: pausedConsumers.has(g.id) };
+  });
+  return result;
+}
 
 const CONSUMER_GROUPS = [
   {
@@ -487,22 +514,35 @@ app.get("/api/stats", (req, res) => {
 
 // Get consumer groups
 app.get("/api/consumer-groups", (req, res) => {
+  const lags = getConsumerLags();
   res.json(
     CONSUMER_GROUPS.map((g) => ({
       ...g,
+      paused: pausedConsumers.has(g.id),
       offsets: broker.consumerGroups[g.id] || {},
-      lag: g.topics.reduce((total, topicName) => {
-        const topic = broker.topics[topicName];
-        if (!topic) return total;
-        const committed = broker.consumerGroups[g.id] || {};
-        topic.partitions.forEach((p, i) => {
-          const committedOffset = committed[`${topicName}:${i}`] || 0;
-          total += Math.max(0, p.offset - committedOffset);
-        });
-        return total;
-      }, 0),
+      lag: lags[g.id]?.lag ?? 0,
     })),
   );
+});
+
+// Pause a consumer group (stop consuming → lag builds up)
+app.post("/api/consumer-groups/:id/pause", (req, res) => {
+  const { id } = req.params;
+  if (!CONSUMER_GROUPS.find((g) => g.id === id))
+    return res.status(404).json({ error: "Consumer group not found" });
+  pausedConsumers.add(id);
+  broadcastSSE("consumer-paused", { id });
+  res.json({ id, paused: true });
+});
+
+// Resume a consumer group
+app.post("/api/consumer-groups/:id/resume", (req, res) => {
+  const { id } = req.params;
+  if (!CONSUMER_GROUPS.find((g) => g.id === id))
+    return res.status(404).json({ error: "Consumer group not found" });
+  pausedConsumers.delete(id);
+  broadcastSSE("consumer-resumed", { id });
+  res.json({ id, paused: false });
 });
 
 // Control producer speed

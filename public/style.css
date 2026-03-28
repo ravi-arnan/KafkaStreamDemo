@@ -1074,6 +1074,273 @@ canvas {
     line-height: 1.6;
 }
 
+/* ─── Partition Heatmap ──────────────────────────────────────────────────────── */
+
+.heatmap-wrap {
+    overflow-x: auto;
+}
+.heatmap-table {
+    display: grid;
+    grid-template-columns: 110px repeat(3, 1fr);
+    gap: 6px;
+    min-width: 380px;
+}
+.heatmap-col-header {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px 0;
+}
+.heatmap-row-label {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.heatmap-cell {
+    height: 64px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 1px solid var(--border);
+    background: var(--surface-offset);
+    transition:
+        background 0.4s ease,
+        border-color 0.4s ease,
+        box-shadow 0.4s ease;
+    position: relative;
+    overflow: hidden;
+    cursor: default;
+}
+.heatmap-cell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    opacity: var(--cell-opacity, 0);
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+}
+.heatmap-cell-count {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    position: relative;
+    z-index: 1;
+    transition: color 0.4s ease;
+}
+.heatmap-cell-label {
+    font-size: 9px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    position: relative;
+    z-index: 1;
+    transition: color 0.4s ease;
+}
+.heatmap-cell.hot .heatmap-cell-count {
+    color: #fff;
+}
+.heatmap-cell.hot .heatmap-cell-label {
+    color: rgba(255, 255, 255, 0.75);
+}
+.heatmap-cell.active-flash {
+    animation: heatFlash 0.5s ease-out;
+}
+@keyframes heatFlash {
+    0% {
+        box-shadow: 0 0 14px var(--accent);
+    }
+    100% {
+        box-shadow: none;
+    }
+}
+.heatmap-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 12px;
+    padding: 20px;
+}
+
+/* ─── Consumer Lag Demo ──────────────────────────────────────────────────────── */
+
+.consumer-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 10px;
+}
+.consumer-card-left {
+    flex: 1;
+    min-width: 0;
+}
+.consumer-card-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.consumer-lag-block {
+    text-align: right;
+}
+.lag-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    transition: color 0.3s ease;
+}
+.lag-value.lag-ok {
+    color: var(--info-color);
+}
+.lag-value.lag-warn {
+    color: var(--warn-color);
+}
+.lag-value.lag-crit {
+    color: var(--error-color);
+    animation: lagPulse 1s ease-in-out infinite;
+}
+@keyframes lagPulse {
+    0%,
+    100% {
+        text-shadow: none;
+    }
+    50% {
+        text-shadow: 0 0 12px var(--error-color);
+    }
+}
+.lag-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Lag meter bar */
+.lag-meter {
+    margin: 10px 0 8px;
+}
+.lag-meter-track {
+    height: 6px;
+    background: var(--surface-offset);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+.lag-meter-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition:
+        width 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.4s ease;
+    position: relative;
+}
+.lag-meter-fill.lag-growing::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    width: 20px;
+    background: linear-gradient(
+        to right,
+        transparent,
+        rgba(255, 255, 255, 0.35)
+    );
+    animation: lagSweep 1s linear infinite;
+}
+@keyframes lagSweep {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0.4;
+    }
+}
+.lag-meter-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+.lag-meter-val {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+.lag-meter-max {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+/* Pause / Resume button */
+.btn-pause {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    transition: all var(--transition);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface-offset);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.btn-pause:hover {
+    background: var(--warn-color);
+    border-color: var(--warn-color);
+    color: #fff;
+}
+.btn-pause.paused {
+    background: rgba(224, 64, 96, 0.12);
+    border-color: var(--error-color);
+    color: var(--error-color);
+}
+.btn-pause.paused:hover {
+    background: var(--error-color);
+    color: #fff;
+}
+
+/* Paused badge on consumer card */
+.paused-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--error-color);
+    background: rgba(224, 64, 96, 0.1);
+    border: 1px solid var(--error-color);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    animation: pausedBlink 2s ease-in-out infinite;
+}
+@keyframes pausedBlink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
 .slider {
     flex: 1;
     -webkit-appearance: none;

@@ -17,6 +17,9 @@ const state = {
   maxMessages: 500,
   messages: [],
   producerConfig: { speed: 1000, batchSize: 3, running: true },
+  // Tahap 3 — Partition Heatmap + Consumer Lag Demo
+  partitionActivity: {}, // { "topic:partition": [timestamp, ...] } rolling 30s
+  consumerPaused: {}, // { groupId: boolean }
 };
 
 // ─── DOM references ─────────────────────────────────────────────────────────
@@ -65,7 +68,7 @@ function connectSSE() {
   });
 
   sse.addEventListener("messages", (e) => {
-    const { records, stats } = JSON.parse(e.data);
+    const { records, stats, consumerLags } = JSON.parse(e.data);
     if (stats) Object.assign(state.stats, stats);
 
     records.forEach((record) => {
@@ -77,6 +80,7 @@ function connectSSE() {
     updateLevelBars();
     updateServiceList();
     updateArchView(records, state.stats);
+    if (consumerLags) updateConsumerLagsFromSSE(consumerLags);
   });
 
   sse.addEventListener("manual-message", (e) => {
@@ -111,6 +115,23 @@ function connectSSE() {
     Object.assign(state.producerConfig, cfg);
   });
 
+  sse.addEventListener("consumer-paused", (e) => {
+    const { id } = JSON.parse(e.data);
+    state.consumerPaused[id] = true;
+    updateLagMeter(id, null, true);
+    // Re-render card to show paused badge
+    renderConsumers();
+    showToast(`Consumer "${id}" di-pause — lag mulai menumpuk`, "info");
+  });
+
+  sse.addEventListener("consumer-resumed", (e) => {
+    const { id } = JSON.parse(e.data);
+    state.consumerPaused[id] = false;
+    updateLagMeter(id, null, false);
+    renderConsumers();
+    showToast(`Consumer "${id}" di-resume — lag mulai turun`, "success");
+  });
+
   sse.onerror = () => {
     setConnected(false);
     setTimeout(connectSSE, 3000);
@@ -135,6 +156,9 @@ function processRecord(record, isManual) {
 
   // Service stats
   state.serviceCounts[service] = (state.serviceCounts[service] || 0) + 1;
+
+  // Partition activity tracking (heatmap rolling window)
+  trackPartitionActivity(record);
 
   // Add to message buffer
   state.messages.unshift(record);
@@ -411,6 +435,177 @@ function updateArchView(records, stats) {
   });
 }
 
+// ─── Partition Heatmap ────────────────────────────────────────────────────────
+
+/**
+ * Record a message arrival for a specific topic+partition.
+ * Timestamps older than 30s are pruned on render.
+ */
+function trackPartitionActivity(record) {
+  const partition =
+    record.partition !== undefined
+      ? record.partition
+      : hashKeyToPartition(record.key, 3);
+  const key = `${record.topic}:${partition}`;
+  if (!state.partitionActivity[key]) state.partitionActivity[key] = [];
+  state.partitionActivity[key].push(Date.now());
+}
+
+/**
+ * Re-render the heatmap grid in the Architecture view.
+ * Called every 2 seconds via setInterval.
+ */
+function renderHeatmap() {
+  const container = $("#partitionHeatmap");
+  if (!container) return;
+
+  const WINDOW_MS = 30_000;
+  const cutoff = Date.now() - WINDOW_MS;
+
+  // Prune old timestamps
+  Object.keys(state.partitionActivity).forEach((k) => {
+    state.partitionActivity[k] = state.partitionActivity[k].filter(
+      (t) => t > cutoff,
+    );
+  });
+
+  const topics = ["app-logs", "error-logs", "audit-events"];
+  const partitions = [0, 1, 2];
+
+  // Find max count for normalisation
+  let maxCount = 1;
+  topics.forEach((topic) => {
+    partitions.forEach((p) => {
+      const count = (state.partitionActivity[`${topic}:${p}`] || []).length;
+      if (count > maxCount) maxCount = count;
+    });
+  });
+
+  // Build HTML — keep static header row, replace data rows
+  const rows = topics
+    .map((topic) => {
+      const cells = partitions
+        .map((p) => {
+          const count = (state.partitionActivity[`${topic}:${p}`] || []).length;
+          const intensity = maxCount > 0 ? count / maxCount : 0;
+          const isHot = intensity > 0.55;
+          return `<div
+            class="heatmap-cell ${isHot ? "hot" : ""}"
+            style="--cell-opacity: ${(intensity * 0.65).toFixed(3)}"
+            title="${topic} · P${p} · ${count} msgs/30s"
+          >
+            <span class="heatmap-cell-count">${count}</span>
+            <span class="heatmap-cell-label">msgs/30s</span>
+          </div>`;
+        })
+        .join("");
+      return `<div class="heatmap-row-label">${topic}</div>${cells}`;
+    })
+    .join("");
+
+  // Replace everything except the 4 static header divs
+  // Remove old row content first
+  const children = Array.from(container.children);
+  // First 4 children are the col-headers — keep them
+  children.slice(4).forEach((el) => el.remove());
+  const frag = document.createDocumentFragment();
+  const tmp = document.createElement("div");
+  tmp.innerHTML = rows;
+  while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+  container.appendChild(frag);
+
+  // Remove "menunggu data" placeholder if present
+  const empty = container.querySelector(".heatmap-empty");
+  if (empty && Object.keys(state.partitionActivity).length > 0) empty.remove();
+}
+
+// ─── Consumer Lag Demo ────────────────────────────────────────────────────────
+
+/** Map lag value → CSS color string */
+function lagToColor(lag) {
+  if (lag === 0) return "var(--info-color)";
+  if (lag < 15) return "#7ec84a";
+  if (lag < 50) return "var(--warn-color)";
+  if (lag < 150) return "#e07530";
+  return "var(--error-color)";
+}
+
+/** Map lag value → percentage width for the meter bar (max = 300) */
+function lagToPct(lag) {
+  return Math.min(100, (lag / 300) * 100).toFixed(1);
+}
+
+/** CSS class name for the lag value number */
+function lagClass(lag) {
+  if (lag === 0) return "lag-ok";
+  if (lag < 50) return "lag-warn";
+  return "lag-crit";
+}
+
+/**
+ * Update lag meter + value without full re-render.
+ * Called from SSE broadcast data (every ~500ms).
+ * @param {string} groupId
+ * @param {number|null} lag  — null = keep existing value
+ * @param {boolean|null} paused — null = keep existing state
+ */
+function updateLagMeter(groupId, lag, paused) {
+  // Lag value text
+  const lagEl = $(`#lag-${groupId}`);
+  if (lagEl && lag !== null) {
+    lagEl.textContent = lag;
+    lagEl.className = `lag-value ${lagClass(lag)}`;
+  }
+
+  // Meter fill
+  const fillEl = $(`#lagfill-${groupId}`);
+  if (fillEl && lag !== null) {
+    fillEl.style.width = lagToPct(lag) + "%";
+    fillEl.style.background = lagToColor(lag);
+    fillEl.classList.toggle("lag-growing", paused === true && lag > 0);
+  }
+
+  // Meter label
+  const labelEl = $(`#lagval-${groupId}`);
+  if (labelEl && lag !== null) {
+    labelEl.textContent = `${lag} unread msgs`;
+  }
+
+  // Architecture view lag
+  const archEl = $(`#archLag-${groupId}`);
+  if (archEl && lag !== null) {
+    archEl.textContent = lag;
+  }
+}
+
+/**
+ * Bulk-update all consumer lags from SSE "messages" event payload.
+ * Data shape: { [groupId]: { lag: number, paused: boolean } }
+ */
+function updateConsumerLagsFromSSE(lagsData) {
+  Object.entries(lagsData).forEach(([id, { lag, paused }]) => {
+    // Update client-side paused state silently
+    state.consumerPaused[id] = paused;
+    updateLagMeter(id, lag, paused);
+  });
+}
+
+/**
+ * Toggle pause/resume for a consumer group via REST API.
+ */
+async function toggleConsumerPause(groupId) {
+  const isPaused = !!state.consumerPaused[groupId];
+  const action = isPaused ? "resume" : "pause";
+  try {
+    await postJSON(
+      `./api/consumer-groups/${encodeURIComponent(groupId)}/${action}`,
+      {},
+    );
+  } catch (e) {
+    showToast(`Gagal ${action} consumer "${groupId}"`, "error");
+  }
+}
+
 // ─── Topics ──────────────────────────────────────────────────────────────────
 
 function renderTopics() {
@@ -453,55 +648,70 @@ function renderConsumers() {
     list.innerHTML = '<div class="empty-state">No consumer groups</div>';
     return;
   }
+
   list.innerHTML = state.consumerGroups
-    .map(
-      (g) => `
-    <div class="consumer-card">
-      <div class="consumer-header">
-        <div>
-          <div class="consumer-id">${escapeHtml(g.id)}</div>
+    .map((g) => {
+      const paused = !!state.consumerPaused[g.id];
+      const lag = g.lag ?? 0;
+      const pauseIcon = paused
+        ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume'
+        : '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause';
+      return `
+    <div class="consumer-card" id="ccard-${escapeHtml(g.id)}">
+      <div class="consumer-card-header">
+        <div class="consumer-card-left">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+            <div class="consumer-id">${escapeHtml(g.id)}</div>
+            ${paused ? '<span class="paused-badge">⏸ PAUSED</span>' : ""}
+          </div>
           <div class="consumer-role">${escapeHtml(g.role || "")}</div>
         </div>
-        <div class="consumer-lag">
-          <div class="lag-value" id="lag-${g.id}">${g.lag ?? "—"}</div>
-          <div class="lag-label">msg lag</div>
+        <div class="consumer-card-right">
+          <div class="consumer-lag-block">
+            <div class="lag-value ${lagClass(lag)}" id="lag-${escapeHtml(g.id)}">${lag}</div>
+            <div class="lag-label">msg lag</div>
+          </div>
+          <button
+            class="btn-pause${paused ? " paused" : ""}"
+            data-group="${escapeHtml(g.id)}"
+            title="${paused ? "Resume consumer" : "Pause consumer"}"
+          >${pauseIcon}</button>
+        </div>
+      </div>
+      <div class="lag-meter">
+        <div class="lag-meter-track">
+          <div
+            class="lag-meter-fill${paused && lag > 0 ? " lag-growing" : ""}"
+            id="lagfill-${escapeHtml(g.id)}"
+            style="width:${lagToPct(lag)}%;background:${lagToColor(lag)}"
+          ></div>
+        </div>
+        <div class="lag-meter-labels">
+          <span class="lag-meter-val" id="lagval-${escapeHtml(g.id)}">${lag} unread msgs</span>
+          <span class="lag-meter-max">max ~300</span>
         </div>
       </div>
       <div class="consumer-topics">
         ${(g.topics || []).map((t) => `<span class="consumer-topic-chip">${escapeHtml(t)}</span>`).join("")}
       </div>
-    </div>
-  `,
-    )
+    </div>`;
+    })
     .join("");
+
+  // Bind pause/resume buttons via event delegation
+  list.querySelectorAll(".btn-pause").forEach((btn) => {
+    btn.addEventListener("click", () => toggleConsumerPause(btn.dataset.group));
+  });
 }
 
-// Refresh consumer lag every 5s
+// Refresh consumer lag every 5s (fallback — primary update via SSE broadcast)
 setInterval(async () => {
   try {
     const groups = await fetchJSON("./api/consumer-groups");
     groups.forEach((g) => {
-      // Update Consumers view lag
-      const el = $(`#lag-${g.id}`);
-      if (el) {
-        const prev = parseInt(el.textContent) || 0;
-        if (prev !== g.lag) {
-          el.textContent = g.lag;
-          el.style.animation = "none";
-          requestAnimationFrame(() => {
-            el.style.animation = "";
-          });
-        }
-      }
-      // Update Architecture view lag
-      const archEl = $(`#archLag-${g.id}`);
-      if (archEl) {
-        const prev = parseInt(archEl.textContent) || 0;
-        if (prev !== g.lag) {
-          archEl.textContent = g.lag;
-          archEl.classList.toggle("lag-high", g.lag > 20);
-        }
-      }
+      // Sync paused state from server in case of page reload
+      state.consumerPaused[g.id] = !!g.paused;
+      updateLagMeter(g.id, g.lag, g.paused);
     });
   } catch (_) {}
 }, 5000);
@@ -819,12 +1029,15 @@ function showToast(message, type = "info") {
 
 function init() {
   initTheme();
+  initChart();
   initNavigation();
   initStreamControls();
   initTopicsManagement();
   initProducerControls();
-  initChart();
   connectSSE();
+
+  // Heatmap refresh every 2s
+  setInterval(renderHeatmap, 2000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
