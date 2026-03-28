@@ -100,7 +100,7 @@ class KafkaBroker {
       const committedOffset = this.consumerGroups[groupId][key] || 0;
 
       const newMessages = partition.messages.filter(
-        (m) => m.offset >= committedOffset
+        (m) => m.offset >= committedOffset,
       );
 
       messages.push(...newMessages);
@@ -214,12 +214,29 @@ function generateLogMessage(level) {
     .replace("{email}", `user${Math.floor(Math.random() * 999)}@example.com`)
     .replace("{n}", Math.floor(Math.random() * 10))
     .replace("{max}", "50")
-    .replace("{ip}", `10.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`)
+    .replace(
+      "{ip}",
+      `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+    )
     .replace("{pct}", Math.floor(Math.random() * 40) + 60)
     .replace("{svc}", randomChoice(SERVICES))
-    .replace("{reason}", randomChoice(["expired", "invalid signature", "malformed"]))
-    .replace("{handler}", randomChoice(["OrderController", "PaymentProcessor", "AuthMiddleware"]))
-    .replace("{path}", randomChoice(["/api/v1/orders", "/api/v2/payments", "/health", "/metrics"]));
+    .replace(
+      "{reason}",
+      randomChoice(["expired", "invalid signature", "malformed"]),
+    )
+    .replace(
+      "{handler}",
+      randomChoice(["OrderController", "PaymentProcessor", "AuthMiddleware"]),
+    )
+    .replace(
+      "{path}",
+      randomChoice([
+        "/api/v1/orders",
+        "/api/v2/payments",
+        "/health",
+        "/metrics",
+      ]),
+    );
 }
 
 // ─── Global Broker Setup ─────────────────────────────────────────────────────
@@ -260,7 +277,8 @@ async function autoProducer() {
     for (let i = 0; i < producerBatchSize; i++) {
       const level = randomChoice(LOG_LEVELS);
       const service = randomChoice(SERVICES);
-      const topic = level === "ERROR" || level === "FATAL" ? "error-logs" : "app-logs";
+      const topic =
+        level === "ERROR" || level === "FATAL" ? "error-logs" : "app-logs";
 
       try {
         const record = broker.produce(topic, {
@@ -325,9 +343,21 @@ autoProducer().catch(console.error);
 // ─── Consumer groups ──────────────────────────────────────────────────────────
 
 const CONSUMER_GROUPS = [
-  { id: "log-aggregator", topics: ["app-logs"], role: "Aggregates all app logs" },
-  { id: "error-monitor", topics: ["error-logs", "audit-events"], role: "Monitors critical errors" },
-  { id: "audit-processor", topics: ["audit-events"], role: "Processes audit trail" },
+  {
+    id: "log-aggregator",
+    topics: ["app-logs"],
+    role: "Aggregates all app logs",
+  },
+  {
+    id: "error-monitor",
+    topics: ["error-logs", "audit-events"],
+    role: "Monitors critical errors",
+  },
+  {
+    id: "audit-processor",
+    topics: ["audit-events"],
+    role: "Processes audit trail",
+  },
 ];
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
@@ -354,7 +384,7 @@ app.get("/api/stream", (req, res) => {
         throughput: broker.getThroughput(),
         uptime: Math.floor((Date.now() - broker.stats.startTime) / 1000),
       },
-    })}\n\n`
+    })}\n\n`,
   );
 
   // Heartbeat every 15s
@@ -383,7 +413,8 @@ app.get("/api/topics", (req, res) => {
 app.post("/api/topics", (req, res) => {
   const { name, partitions = 3, replicationFactor = 1 } = req.body;
   if (!name) return res.status(400).json({ error: "Topic name required" });
-  if (broker.topics[name]) return res.status(409).json({ error: "Topic already exists" });
+  if (broker.topics[name])
+    return res.status(409).json({ error: "Topic already exists" });
   broker.createTopic(name, partitions, replicationFactor);
   broadcastSSE("topic-created", broker.getTopicInfo(name));
   res.status(201).json(broker.getTopicInfo(name));
@@ -392,7 +423,8 @@ app.post("/api/topics", (req, res) => {
 // Delete topic
 app.delete("/api/topics/:name", (req, res) => {
   const { name } = req.params;
-  if (!broker.topics[name]) return res.status(404).json({ error: "Topic not found" });
+  if (!broker.topics[name])
+    return res.status(404).json({ error: "Topic not found" });
   delete broker.topics[name];
   broadcastSSE("topic-deleted", { name });
   res.json({ deleted: name });
@@ -400,14 +432,27 @@ app.delete("/api/topics/:name", (req, res) => {
 
 // Produce message manually
 app.post("/api/produce", (req, res) => {
-  const { topic, key, value, level = "INFO", service = "manual-producer" } = req.body;
+  const {
+    topic,
+    key,
+    value,
+    level = "INFO",
+    service = "manual-producer",
+  } = req.body;
   if (!topic) return res.status(400).json({ error: "topic required" });
-  if (!broker.topics[topic]) return res.status(404).json({ error: "Topic not found" });
+  if (!broker.topics[topic])
+    return res.status(404).json({ error: "Topic not found" });
 
   try {
     const record = broker.produce(topic, {
       key: key || service,
-      value: { level, service, message: value || generateLogMessage(level), traceId: uuidv4().slice(0, 16), environment: "manual" },
+      value: {
+        level,
+        service,
+        message: value || generateLogMessage(level),
+        traceId: uuidv4().slice(0, 16),
+        environment: "manual",
+      },
     });
     broadcastSSE("manual-message", { record });
     res.json(record);
@@ -420,7 +465,8 @@ app.post("/api/produce", (req, res) => {
 app.get("/api/consume/:topic", (req, res) => {
   const { topic } = req.params;
   const { group = "default-consumer", max = 20 } = req.query;
-  if (!broker.topics[topic]) return res.status(404).json({ error: "Topic not found" });
+  if (!broker.topics[topic])
+    return res.status(404).json({ error: "Topic not found" });
   const messages = broker.consume(topic, group, parseInt(max));
   res.json({ topic, group, messages, count: messages.length });
 });
@@ -441,30 +487,41 @@ app.get("/api/stats", (req, res) => {
 
 // Get consumer groups
 app.get("/api/consumer-groups", (req, res) => {
-  res.json(CONSUMER_GROUPS.map((g) => ({
-    ...g,
-    offsets: broker.consumerGroups[g.id] || {},
-    lag: g.topics.reduce((total, topicName) => {
-      const topic = broker.topics[topicName];
-      if (!topic) return total;
-      const committed = broker.consumerGroups[g.id] || {};
-      topic.partitions.forEach((p, i) => {
-        const committedOffset = committed[`${topicName}:${i}`] || 0;
-        total += Math.max(0, p.offset - committedOffset);
-      });
-      return total;
-    }, 0),
-  })));
+  res.json(
+    CONSUMER_GROUPS.map((g) => ({
+      ...g,
+      offsets: broker.consumerGroups[g.id] || {},
+      lag: g.topics.reduce((total, topicName) => {
+        const topic = broker.topics[topicName];
+        if (!topic) return total;
+        const committed = broker.consumerGroups[g.id] || {};
+        topic.partitions.forEach((p, i) => {
+          const committedOffset = committed[`${topicName}:${i}`] || 0;
+          total += Math.max(0, p.offset - committedOffset);
+        });
+        return total;
+      }, 0),
+    })),
+  );
 });
 
 // Control producer speed
 app.post("/api/producer/config", (req, res) => {
   const { speed, batchSize, running } = req.body;
   if (speed !== undefined) producerSpeed = Math.max(100, Math.min(5000, speed));
-  if (batchSize !== undefined) producerBatchSize = Math.max(1, Math.min(20, batchSize));
+  if (batchSize !== undefined)
+    producerBatchSize = Math.max(1, Math.min(20, batchSize));
   if (running !== undefined) producerRunning = running;
-  broadcastSSE("producer-config", { speed: producerSpeed, batchSize: producerBatchSize, running: producerRunning });
-  res.json({ speed: producerSpeed, batchSize: producerBatchSize, running: producerRunning });
+  broadcastSSE("producer-config", {
+    speed: producerSpeed,
+    batchSize: producerBatchSize,
+    running: producerRunning,
+  });
+  res.json({
+    speed: producerSpeed,
+    batchSize: producerBatchSize,
+    running: producerRunning,
+  });
 });
 
 // Get recent messages from topic (for initial load)
@@ -485,7 +542,8 @@ app.get("*", (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Kafka Demo running on port ${PORT}`);
+  console.log(`Dashboard: http://localhost:${PORT}`);
 });
