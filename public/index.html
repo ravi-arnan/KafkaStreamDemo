@@ -221,6 +221,20 @@
                         </svg>
                         Architecture
                     </button>
+                    <button class="nav-item" data-view="scenarios">
+                        <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                            <line x1="19" y1="3" x2="19" y2="21" />
+                        </svg>
+                        Scenarios
+                    </button>
                 </nav>
 
                 <div class="sidebar-footer">
@@ -1322,6 +1336,92 @@
                     <!-- /.concept-grid -->
                 </div>
                 <!-- /#view-architecture -->
+
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <!-- Scenarios View                                              -->
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <div class="view" id="view-scenarios">
+                    <div class="page-header">
+                        <h1>Scenario Mode</h1>
+                        <span
+                            class="section-badge"
+                            style="font-size: 12px; padding: 4px 12px"
+                            >Demo Interaktif</span
+                        >
+                    </div>
+
+                    <!-- Running Banner (hidden by default) -->
+                    <div class="scenario-banner hidden" id="scenarioBanner">
+                        <div class="scenario-banner-left">
+                            <span class="scenario-banner-emoji" id="bannerEmoji"
+                                >🚀</span
+                            >
+                            <div style="min-width: 0">
+                                <div class="scenario-banner-label">
+                                    ▶ SEDANG BERJALAN
+                                </div>
+                                <div
+                                    class="scenario-banner-name"
+                                    id="bannerName"
+                                >
+                                    —
+                                </div>
+                                <div
+                                    class="scenario-banner-concept"
+                                    id="bannerConcept"
+                                >
+                                    —
+                                </div>
+                            </div>
+                        </div>
+                        <div class="scenario-banner-right">
+                            <div
+                                class="scenario-countdown"
+                                id="scenarioCountdown"
+                            >
+                                0s
+                            </div>
+                            <div class="scenario-progress-track">
+                                <div
+                                    class="scenario-progress-fill"
+                                    id="scenarioProgress"
+                                    style="width: 100%"
+                                ></div>
+                            </div>
+                            <button
+                                class="btn-stop-scenario"
+                                id="stopScenarioBtn"
+                            >
+                                ⏹ Stop
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scenario Cards Grid (filled by JS) -->
+                    <div class="scenario-grid" id="scenarioGrid">
+                        <div class="empty-state">Memuat skenario...</div>
+                    </div>
+
+                    <!-- Scenario Log -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>Scenario Log</h2>
+                            <button
+                                class="btn btn-ghost"
+                                id="clearScenarioLogBtn"
+                                style="font-size: 11px; padding: 4px 10px"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        <div class="scenario-log" id="scenarioLog">
+                            <div class="scenario-log-empty">
+                                Belum ada skenario yang dijalankan...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- /#view-scenarios -->
             </main>
         </div>
 

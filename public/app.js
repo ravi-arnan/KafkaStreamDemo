@@ -20,6 +20,12 @@ const state = {
   // Tahap 3 — Partition Heatmap + Consumer Lag Demo
   partitionActivity: {}, // { "topic:partition": [timestamp, ...] } rolling 30s
   consumerPaused: {}, // { groupId: boolean }
+  // Tahap 4 — Scenario Mode
+  scenarios: [], // list loaded from /api/scenarios
+  activeScenario: null, // id of currently running scenario
+  scenarioDuration: 0, // total duration of active scenario
+  scenarioSecondsLeft: 0, // client-side remaining seconds
+  scenarioCountdownInterval: null, // client countdown timer handle
 };
 
 // ─── DOM references ─────────────────────────────────────────────────────────
@@ -130,6 +136,36 @@ function connectSSE() {
     updateLagMeter(id, null, false);
     renderConsumers();
     showToast(`Consumer "${id}" di-resume — lag mulai turun`, "success");
+  });
+
+  sse.addEventListener("scenario-started", (e) => {
+    const data = JSON.parse(e.data);
+    state.activeScenario = data.id;
+    state.scenarioDuration = data.duration;
+    state.scenarioSecondsLeft = data.duration;
+    if (!data.instant) {
+      updateScenarioBanner(data);
+      startScenarioCountdown(data.duration);
+    }
+    renderScenarios();
+    appendScenarioLog(
+      `▶ Skenario dimulai: ${data.emoji || "🎬"} ${escapeHtml(data.name)}`,
+      "system",
+    );
+  });
+
+  sse.addEventListener("scenario-step", (e) => {
+    const { msg } = JSON.parse(e.data);
+    appendScenarioLog(msg);
+  });
+
+  sse.addEventListener("scenario-stopped", (e) => {
+    const { id } = JSON.parse(e.data);
+    state.activeScenario = null;
+    stopScenarioCountdown();
+    hideScenarioBanner();
+    renderScenarios();
+    appendScenarioLog(`⏹ Skenario selesai: ${escapeHtml(id)}`, "success");
   });
 
   sse.onerror = () => {
@@ -606,6 +642,206 @@ async function toggleConsumerPause(groupId) {
   }
 }
 
+// ─── Scenario Mode ────────────────────────────────────────────────────────────
+
+/** Load scenario list from server and render cards */
+async function loadAndRenderScenarios() {
+  try {
+    state.scenarios = await fetchJSON("./api/scenarios");
+    renderScenarios();
+  } catch (_) {}
+}
+
+/** Render scenario cards grid */
+function renderScenarios() {
+  const grid = $("#scenarioGrid");
+  if (!grid) return;
+
+  if (!state.scenarios.length) {
+    grid.innerHTML = '<div class="empty-state">Memuat skenario...</div>';
+    return;
+  }
+
+  const hasRunning = !!state.activeScenario;
+
+  grid.innerHTML = state.scenarios
+    .map((s) => {
+      const isActive = state.activeScenario === s.id;
+      const isDimmed = hasRunning && !isActive;
+      const isInstant = s.instant || s.duration === 0;
+
+      const conceptChips = s.concept
+        ? s.concept
+            .split("·")
+            .map(
+              (c) =>
+                `<span class="concept-chip ${s.theme}">${escapeHtml(c.trim())}</span>`,
+            )
+            .join("")
+        : "";
+
+      let btnLabel, btnClass;
+      if (isActive) {
+        btnLabel = `⏳ Berjalan... ${state.scenarioSecondsLeft}s`;
+        btnClass = "btn-run-scenario running";
+      } else if (isInstant) {
+        btnLabel = "⚡ Jalankan";
+        btnClass = "btn-run-scenario";
+      } else {
+        btnLabel = `▶ Jalankan — ${s.duration}s`;
+        btnClass = "btn-run-scenario";
+      }
+
+      return `<div
+          class="scenario-card ${isActive ? "active" : ""} ${isDimmed ? "dimmed" : ""}"
+          data-scenario-id="${escapeHtml(s.id)}"
+        >
+          <div class="scenario-card-top">
+            <div class="scenario-card-title-row">
+              <span class="scenario-emoji">${s.emoji}</span>
+              <div>
+                <div class="scenario-name">${escapeHtml(s.name)}</div>
+                ${!isInstant ? `<div class="scenario-duration-badge">⏱ ${s.duration}s</div>` : ""}
+              </div>
+            </div>
+            <button
+              class="${btnClass}"
+              data-run-scenario="${escapeHtml(s.id)}"
+              ${isDimmed ? "disabled" : ""}
+            >${btnLabel}</button>
+          </div>
+          <div class="scenario-tagline">${escapeHtml(s.tagline)}</div>
+          ${conceptChips ? `<div class="scenario-concepts">${conceptChips}</div>` : ""}
+        </div>`;
+    })
+    .join("");
+
+  // Bind run buttons
+  grid.querySelectorAll("[data-run-scenario]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      triggerScenario(btn.dataset.runScenario),
+    );
+  });
+}
+
+/** Trigger a scenario via API */
+async function triggerScenario(scenarioId) {
+  try {
+    await postJSON(`./api/scenarios/${encodeURIComponent(scenarioId)}/run`, {});
+  } catch (e) {
+    showToast(`Gagal menjalankan skenario: ${e.message}`, "error");
+  }
+}
+
+/** Stop the active scenario via API */
+async function stopScenarioApi() {
+  try {
+    await postJSON("./api/scenarios/stop", {});
+  } catch (e) {
+    showToast("Gagal menghentikan skenario", "error");
+  }
+}
+
+/** Show and populate the running scenario banner */
+function updateScenarioBanner(data) {
+  const banner = $("#scenarioBanner");
+  if (!banner) return;
+  banner.classList.remove("hidden");
+  const emojiEl = $("#bannerEmoji");
+  const nameEl = $("#bannerName");
+  const conceptEl = $("#bannerConcept");
+  if (emojiEl) emojiEl.textContent = data.emoji || "🎬";
+  if (nameEl) nameEl.textContent = data.name;
+  if (conceptEl) conceptEl.textContent = data.concept || "";
+  const fill = $("#scenarioProgress");
+  if (fill) fill.style.width = "100%";
+}
+
+/** Hide the running scenario banner */
+function hideScenarioBanner() {
+  const banner = $("#scenarioBanner");
+  if (banner) banner.classList.add("hidden");
+  const fill = $("#scenarioProgress");
+  if (fill) fill.style.width = "100%";
+  const countdown = $("#scenarioCountdown");
+  if (countdown) countdown.textContent = "0s";
+}
+
+/** Start client-side countdown (updates every second) */
+function startScenarioCountdown(totalDuration) {
+  stopScenarioCountdown();
+  state.scenarioSecondsLeft = totalDuration;
+
+  state.scenarioCountdownInterval = setInterval(() => {
+    state.scenarioSecondsLeft = Math.max(0, state.scenarioSecondsLeft - 1);
+    const remaining = state.scenarioSecondsLeft;
+
+    // Countdown text
+    const countdown = $("#scenarioCountdown");
+    if (countdown) countdown.textContent = remaining + "s";
+
+    // Progress bar shrinks from 100% → 0%
+    const pct = totalDuration > 0 ? (remaining / totalDuration) * 100 : 0;
+    const fill = $("#scenarioProgress");
+    if (fill) fill.style.width = pct.toFixed(1) + "%";
+
+    // Update active card button label
+    const runBtn = $(`[data-run-scenario="${state.activeScenario}"]`);
+    if (runBtn && runBtn.classList.contains("running")) {
+      runBtn.textContent = `⏳ Berjalan... ${remaining}s`;
+    }
+
+    if (remaining <= 0) stopScenarioCountdown();
+  }, 1000);
+}
+
+function stopScenarioCountdown() {
+  if (state.scenarioCountdownInterval) {
+    clearInterval(state.scenarioCountdownInterval);
+    state.scenarioCountdownInterval = null;
+  }
+}
+
+/** Append a line to the Scenario Log panel (newest on top) */
+function appendScenarioLog(msg, type = "") {
+  const log = $("#scenarioLog");
+  if (!log) return;
+
+  // Remove empty placeholder
+  const empty = log.querySelector(".scenario-log-empty");
+  if (empty) empty.remove();
+
+  const entry = document.createElement("div");
+  entry.className = "scenario-log-entry";
+  entry.innerHTML = `
+    <span class="scenario-log-time">${formatTime(Date.now())}</span>
+    <span class="scenario-log-msg${type ? " " + type : ""}">${escapeHtml(msg)}</span>
+  `;
+  log.insertBefore(entry, log.firstChild);
+
+  // Keep max 60 entries
+  const entries = log.querySelectorAll(".scenario-log-entry");
+  if (entries.length > 60) entries[entries.length - 1].remove();
+}
+
+/** Initialise scenario view controls */
+function initScenarios() {
+  loadAndRenderScenarios();
+
+  const stopBtn = $("#stopScenarioBtn");
+  if (stopBtn) stopBtn.addEventListener("click", stopScenarioApi);
+
+  const clearBtn = $("#clearScenarioLogBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      const log = $("#scenarioLog");
+      if (log)
+        log.innerHTML =
+          '<div class="scenario-log-empty">Log dibersihkan...</div>';
+    });
+  }
+}
+
 // ─── Topics ──────────────────────────────────────────────────────────────────
 
 function renderTopics() {
@@ -1034,6 +1270,7 @@ function init() {
   initStreamControls();
   initTopicsManagement();
   initProducerControls();
+  initScenarios();
   connectSSE();
 
   // Heatmap refresh every 2s

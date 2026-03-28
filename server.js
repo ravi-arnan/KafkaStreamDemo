@@ -267,6 +267,7 @@ function broadcastSSE(event, data) {
 let producerRunning = true;
 let producerSpeed = 1000; // ms between batches
 let producerBatchSize = 3;
+let scenarioErrorMode = false; // when true: force all msgs to ERROR/FATAL
 
 async function autoProducer() {
   while (true) {
@@ -275,7 +276,11 @@ async function autoProducer() {
 
     const produced = [];
     for (let i = 0; i < producerBatchSize; i++) {
-      const level = randomChoice(LOG_LEVELS);
+      const level = scenarioErrorMode
+        ? Math.random() < 0.7
+          ? "ERROR"
+          : "FATAL"
+        : randomChoice(LOG_LEVELS);
       const service = randomChoice(SERVICES);
       const topic =
         level === "ERROR" || level === "FATAL" ? "error-logs" : "app-logs";
@@ -386,6 +391,287 @@ const CONSUMER_GROUPS = [
     role: "Processes audit trail",
   },
 ];
+
+// ─── Scenario Mode ────────────────────────────────────────────────────────────
+
+let activeScenario = null;
+let scenarioTimer = null;
+const scenarioStepTimers = [];
+
+const SCENARIOS_DEF = [
+  {
+    id: "high-traffic",
+    name: "High Traffic Burst",
+    emoji: "🚀",
+    tagline: "Spike throughput 10× — lihat sistem menangani beban tinggi",
+    concept: "Throughput Scaling · Partition Load · Batching",
+    duration: 15,
+    theme: "accent",
+    setup() {
+      producerSpeed = 100;
+      producerBatchSize = 15;
+      producerRunning = true;
+      broadcastSSE("producer-config", {
+        speed: 100,
+        batchSize: 15,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "⚡ Producer diset ke 100ms / 15 msgs per batch — throughput spike dimulai",
+      });
+    },
+    steps: [
+      {
+        at: 5000,
+        msg: "📊 Throughput memuncak — buka Overview (chart) & Architecture (heatmap) sekarang",
+      },
+      {
+        at: 10000,
+        msg: "🔥 Bandingkan: sebelumnya ~3-6 msg/s vs sekarang >50 msg/s — itulah horizontal scaling",
+      },
+    ],
+    cleanup() {
+      producerSpeed = 1000;
+      producerBatchSize = 3;
+      broadcastSSE("producer-config", {
+        speed: 1000,
+        batchSize: 3,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "✅ Selesai — producer kembali ke 1000ms, 3 msgs/batch",
+      });
+    },
+  },
+  {
+    id: "lag-buildup",
+    name: "Consumer Lag Buildup",
+    emoji: "🐢",
+    tagline: "Pause semua consumer — pesan menumpuk, lihat lag membengkak",
+    concept: "Consumer Lag · Backpressure · Offset Gap",
+    duration: 20,
+    theme: "warn",
+    setup() {
+      CONSUMER_GROUPS.forEach((g) => {
+        pausedConsumers.add(g.id);
+        broadcastSSE("consumer-paused", { id: g.id });
+      });
+      broadcastSSE("scenario-step", {
+        msg: "⏸ Semua consumer di-pause — pesan terus datang dari producer tapi tidak dikonsumsi",
+      });
+    },
+    steps: [
+      {
+        at: 7000,
+        msg: "📈 Lag bertambah pesat — buka tab Consumers untuk lihat lag meter tumbuh merah",
+      },
+      {
+        at: 14000,
+        msg: "⚠️ Backpressure: producer terus publish, consumer berhenti → offset gap melebar drastis",
+      },
+    ],
+    cleanup() {
+      CONSUMER_GROUPS.forEach((g) => {
+        pausedConsumers.delete(g.id);
+        broadcastSSE("consumer-resumed", { id: g.id });
+      });
+      broadcastSSE("scenario-step", {
+        msg: "✅ Selesai — semua consumer di-resume, lag akan turun perlahan",
+      });
+    },
+  },
+  {
+    id: "consumer-recovery",
+    name: "Consumer Recovery",
+    emoji: "⚡",
+    tagline: "Resume consumer setelah lag menumpuk — lihat consumer catch-up",
+    concept: "Lag Drain · Offset Commit · Consumer Catch-up",
+    duration: 15,
+    theme: "info",
+    setup() {
+      CONSUMER_GROUPS.forEach((g) => {
+        pausedConsumers.delete(g.id);
+        broadcastSSE("consumer-resumed", { id: g.id });
+      });
+      producerSpeed = 2000;
+      producerBatchSize = 2;
+      broadcastSSE("producer-config", {
+        speed: 2000,
+        batchSize: 2,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "▶ Semua consumer di-resume + producer diperlambat (2000ms/2msgs) — fase recovery dimulai",
+      });
+    },
+    steps: [
+      {
+        at: 5000,
+        msg: "📉 Lag mulai turun — consumer sedang memproses backlog yang menumpuk",
+      },
+      {
+        at: 10000,
+        msg: "🎯 Consumer catch-up hampir selesai — offset mendekati latest partition offset",
+      },
+    ],
+    cleanup() {
+      producerSpeed = 1000;
+      producerBatchSize = 3;
+      broadcastSSE("producer-config", {
+        speed: 1000,
+        batchSize: 3,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "✅ Selesai — sistem kembali normal",
+      });
+    },
+  },
+  {
+    id: "error-flood",
+    name: "Error Storm",
+    emoji: "🔥",
+    tagline: "Banjiri pipeline dengan ERROR/FATAL — stress test error handling",
+    concept: "Error Handling · Alert Threshold · Dead Letter Queue",
+    duration: 10,
+    theme: "error",
+    setup() {
+      scenarioErrorMode = true;
+      producerSpeed = 300;
+      producerBatchSize = 8;
+      broadcastSSE("producer-config", {
+        speed: 300,
+        batchSize: 8,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "🔥 Mode ERROR aktif — semua pesan dipaksa ERROR/FATAL ke error-logs topic",
+      });
+    },
+    steps: [
+      {
+        at: 4000,
+        msg: "⚠️ error-logs meluap — buka Live Stream, filter level ERROR untuk lihat banjir pesan",
+      },
+      {
+        at: 7000,
+        msg: "🚨 Skenario nyata: service crash massal — pipeline & consumer harus tahan beban spike",
+      },
+    ],
+    cleanup() {
+      scenarioErrorMode = false;
+      producerSpeed = 1000;
+      producerBatchSize = 3;
+      broadcastSSE("producer-config", {
+        speed: 1000,
+        batchSize: 3,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "✅ Selesai — mode normal dikembalikan, error mode off",
+      });
+    },
+  },
+  {
+    id: "reset",
+    name: "Reset to Normal",
+    emoji: "🔄",
+    tagline:
+      "Kembalikan semua ke default: producer normal, semua consumer aktif",
+    concept: "",
+    duration: 0,
+    theme: "muted",
+    instant: true,
+    setup() {
+      scenarioErrorMode = false;
+      producerRunning = true;
+      producerSpeed = 1000;
+      producerBatchSize = 3;
+      CONSUMER_GROUPS.forEach((g) => {
+        pausedConsumers.delete(g.id);
+        broadcastSSE("consumer-resumed", { id: g.id });
+      });
+      broadcastSSE("producer-config", {
+        speed: 1000,
+        batchSize: 3,
+        running: true,
+      });
+      broadcastSSE("scenario-step", {
+        msg: "🔄 Reset lengkap — producer 1000ms/3msgs, semua consumer aktif, error mode off",
+      });
+    },
+    steps: [],
+    cleanup() {},
+  },
+];
+
+function stopActiveScenario(broadcast = true) {
+  if (scenarioTimer) {
+    clearTimeout(scenarioTimer);
+    scenarioTimer = null;
+  }
+  scenarioStepTimers.forEach((t) => clearTimeout(t));
+  scenarioStepTimers.length = 0;
+  const prevId = activeScenario;
+  activeScenario = null;
+  if (broadcast && prevId) {
+    const def = SCENARIOS_DEF.find((s) => s.id === prevId);
+    if (def) def.cleanup();
+    broadcastSSE("scenario-stopped", { id: prevId });
+  }
+}
+
+function runScenario(scenarioId) {
+  const def = SCENARIOS_DEF.find((s) => s.id === scenarioId);
+  if (!def) return false;
+
+  // Stop any running scenario first (no broadcast for interrupted scenario)
+  if (activeScenario) stopActiveScenario(false);
+
+  def.setup();
+
+  // Instant scenarios (duration = 0)
+  if (def.instant || def.duration === 0) {
+    broadcastSSE("scenario-started", {
+      id: def.id,
+      name: def.name,
+      emoji: def.emoji,
+      concept: def.concept,
+      duration: 0,
+      instant: true,
+    });
+    broadcastSSE("scenario-stopped", { id: def.id, completed: true });
+    return true;
+  }
+
+  activeScenario = def.id;
+  broadcastSSE("scenario-started", {
+    id: def.id,
+    name: def.name,
+    emoji: def.emoji,
+    concept: def.concept,
+    duration: def.duration,
+  });
+
+  // Schedule intermediate step messages
+  def.steps.forEach(({ at, msg }) => {
+    scenarioStepTimers.push(
+      setTimeout(() => broadcastSSE("scenario-step", { msg }), at),
+    );
+  });
+
+  // Auto-stop after duration
+  scenarioTimer = setTimeout(() => {
+    const id = activeScenario;
+    scenarioStepTimers.forEach((t) => clearTimeout(t));
+    scenarioStepTimers.length = 0;
+    def.cleanup();
+    activeScenario = null;
+    broadcastSSE("scenario-stopped", { id, completed: true });
+  }, def.duration * 1000);
+
+  return true;
+}
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
@@ -543,6 +829,37 @@ app.post("/api/consumer-groups/:id/resume", (req, res) => {
   pausedConsumers.delete(id);
   broadcastSSE("consumer-resumed", { id });
   res.json({ id, paused: false });
+});
+
+// List scenarios
+app.get("/api/scenarios", (req, res) => {
+  res.json(
+    SCENARIOS_DEF.map((s) => ({
+      id: s.id,
+      name: s.name,
+      emoji: s.emoji,
+      tagline: s.tagline,
+      concept: s.concept,
+      duration: s.duration,
+      theme: s.theme,
+      instant: !!s.instant,
+      active: activeScenario === s.id,
+    })),
+  );
+});
+
+// Run a scenario
+app.post("/api/scenarios/:id/run", (req, res) => {
+  const { id } = req.params;
+  const ok = runScenario(id);
+  if (!ok) return res.status(404).json({ error: "Scenario not found" });
+  res.json({ started: id });
+});
+
+// Stop the active scenario
+app.post("/api/scenarios/stop", (req, res) => {
+  stopActiveScenario(true);
+  res.json({ stopped: true });
 });
 
 // Control producer speed
