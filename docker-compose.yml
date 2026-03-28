@@ -1,0 +1,156 @@
+version: "3.9"
+
+# ─── Apache Kafka Real-Time Log Processing Demo ─────────────────────────────
+# Run: docker compose up -d
+# Dashboard: http://localhost:3000
+#
+# Services:
+#   zookeeper      — Kafka coordination (required for Kafka 2.x)
+#   kafka          — Apache Kafka broker (single node)
+#   kafka-ui       — Web UI for Kafka management (optional)
+#   producer       — Log producer: generates log events to Kafka topics
+#   consumer       — Log consumer: reads, filters, and aggregates log events
+#   dashboard      — Express.js dashboard (SSE real-time) at :3000
+
+networks:
+  kafka-net:
+    driver: bridge
+
+volumes:
+  zookeeper-data:
+  kafka-data:
+
+services:
+
+  # ── ZooKeeper ───────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    networks: [kafka-net]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Kafka Broker ────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    networks: [kafka-net]
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"       # Internal
+      - "29092:29092"     # External (for local Kafka clients / tools)
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 1
+      KAFKA_LOG_RETENTION_BYTES: 52428800   # 50 MB
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── Kafka UI (optional) ─────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    networks: [kafka-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    profiles: ["tools"]  # Only starts with: docker compose --profile tools up
+
+  # ── Topic Setup (one-shot init) ─────────────────────────────────────────────
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-setup
+    networks: [kafka-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Creating Kafka topics...'
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic app-logs --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic error-logs --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic audit-events --partitions 3 --replication-factor 1
+      echo 'Topics created successfully:'
+      kafka-topics --bootstrap-server kafka:9092 --list
+      "
+    restart: "no"
+
+  # ── Node.js Producer ────────────────────────────────────────────────────────
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: kafka-producer
+    networks: [kafka-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      PRODUCER_INTERVAL_MS: 500
+      PRODUCER_BATCH_SIZE: 5
+    restart: unless-stopped
+
+  # ── Node.js Consumer ────────────────────────────────────────────────────────
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: kafka-consumer
+    networks: [kafka-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      CONSUMER_GROUP_ID: log-aggregator
+      CONSUMER_TOPICS: app-logs,error-logs,audit-events
+    restart: unless-stopped
+
+  # ── Dashboard ───────────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kafka-dashboard
+    networks: [kafka-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "3000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      KAFKA_BROKERS: kafka:9092
+    restart: unless-stopped

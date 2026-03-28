@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KafkaStream — Real-Time Log Processing Demo</title>
+  <meta name="description" content="Apache Kafka producer-consumer real-time log processing dashboard demo" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="KafkaStream">
+            <rect x="2" y="2" width="10" height="10" rx="2" fill="var(--accent)"/>
+            <rect x="16" y="2" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.6"/>
+            <rect x="2" y="16" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.4"/>
+            <rect x="16" y="16" width="10" height="10" rx="2" fill="var(--accent)" opacity="0.8"/>
+            <line x1="12" y1="7" x2="16" y2="7" stroke="var(--accent)" stroke-width="1.5"/>
+            <line x1="12" y1="21" x2="16" y2="21" stroke="var(--accent)" stroke-width="1.5"/>
+            <line x1="7" y1="12" x2="7" y2="16" stroke="var(--accent)" stroke-width="1.5"/>
+            <line x1="21" y1="12" x2="21" y2="16" stroke="var(--accent)" stroke-width="1.5"/>
+          </svg>
+          <span class="logo-text">KafkaStream</span>
+        </div>
+        <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Dashboard</div>
+        <button class="nav-item active" data-view="overview">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Overview
+        </button>
+        <button class="nav-item" data-view="stream">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Live Stream
+        </button>
+        <button class="nav-item" data-view="topics">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Topics
+        </button>
+        <button class="nav-item" data-view="consumers">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Consumers
+        </button>
+        <button class="nav-item" data-view="producer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Producer
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-badge" id="connectionBadge">
+          <span class="conn-dot"></span>
+          <span class="conn-label">Connecting...</span>
+        </div>
+        <div class="uptime-display">
+          <span class="uptime-label">Uptime</span>
+          <span class="uptime-value mono" id="uptimeDisplay">0s</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main" id="mainContent">
+
+      <!-- Overview View -->
+      <div class="view active" id="view-overview">
+        <div class="page-header">
+          <h1>Overview</h1>
+          <div class="header-actions">
+            <div class="live-indicator" id="liveIndicator">
+              <span class="live-dot"></span>
+              <span>LIVE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card" data-testid="kpi-produced">
+            <div class="kpi-label">Messages Produced</div>
+            <div class="kpi-value mono" id="kpiProduced">0</div>
+            <div class="kpi-sub">Total across all topics</div>
+          </div>
+          <div class="kpi-card" data-testid="kpi-consumed">
+            <div class="kpi-label">Messages Consumed</div>
+            <div class="kpi-value mono" id="kpiConsumed">0</div>
+            <div class="kpi-sub">By all consumer groups</div>
+          </div>
+          <div class="kpi-card" data-testid="kpi-throughput">
+            <div class="kpi-label">Throughput</div>
+            <div class="kpi-value mono" id="kpiThroughput">0</div>
+            <div class="kpi-sub">messages / second</div>
+          </div>
+          <div class="kpi-card" data-testid="kpi-topics">
+            <div class="kpi-label">Active Topics</div>
+            <div class="kpi-value mono" id="kpiTopics">0</div>
+            <div class="kpi-sub">Partitioned topics</div>
+          </div>
+        </div>
+
+        <!-- Throughput Chart -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Throughput (msgs/sec)</h2>
+            <span class="section-badge" id="currentThroughputBadge">0 msg/s</span>
+          </div>
+          <canvas id="throughputChart" height="120"></canvas>
+        </div>
+
+        <!-- Log Level Distribution -->
+        <div class="two-col">
+          <div class="section-card">
+            <div class="section-header"><h2>Log Level Distribution</h2></div>
+            <div class="level-bars" id="levelBars">
+              <div class="level-bar-row"><span class="level-badge debug">DEBUG</span><div class="bar-track"><div class="bar-fill" data-level="DEBUG" style="width:0%"></div></div><span class="bar-count mono" data-count="DEBUG">0</span></div>
+              <div class="level-bar-row"><span class="level-badge info">INFO</span><div class="bar-track"><div class="bar-fill" data-level="INFO" style="width:0%"></div></div><span class="bar-count mono" data-count="INFO">0</span></div>
+              <div class="level-bar-row"><span class="level-badge warn">WARN</span><div class="bar-track"><div class="bar-fill" data-level="WARN" style="width:0%"></div></div><span class="bar-count mono" data-count="WARN">0</span></div>
+              <div class="level-bar-row"><span class="level-badge error">ERROR</span><div class="bar-track"><div class="bar-fill" data-level="ERROR" style="width:0%"></div></div><span class="bar-count mono" data-count="ERROR">0</span></div>
+              <div class="level-bar-row"><span class="level-badge fatal">FATAL</span><div class="bar-track"><div class="bar-fill" data-level="FATAL" style="width:0%"></div></div><span class="bar-count mono" data-count="FATAL">0</span></div>
+            </div>
+          </div>
+          <div class="section-card">
+            <div class="section-header"><h2>Top Services</h2></div>
+            <div class="service-list" id="serviceList">
+              <div class="empty-state">Waiting for data...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Stream View -->
+      <div class="view" id="view-stream">
+        <div class="page-header">
+          <h1>Live Stream</h1>
+          <div class="header-actions">
+            <div class="filter-bar">
+              <select id="streamTopicFilter" class="filter-select">
+                <option value="all">All Topics</option>
+              </select>
+              <select id="streamLevelFilter" class="filter-select">
+                <option value="all">All Levels</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO">INFO</option>
+                <option value="WARN">WARN</option>
+                <option value="ERROR">ERROR</option>
+                <option value="FATAL">FATAL</option>
+              </select>
+              <button class="btn btn-ghost" id="clearStreamBtn">Clear</button>
+              <button class="btn btn-ghost" id="pauseStreamBtn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                Pause
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="log-stream-container" id="logStream">
+          <div class="stream-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <p>Connecting to stream...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Topics View -->
+      <div class="view" id="view-topics">
+        <div class="page-header">
+          <h1>Topics</h1>
+          <button class="btn btn-primary" id="newTopicBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Topic
+          </button>
+        </div>
+
+        <div class="topics-grid" id="topicsGrid">
+          <!-- Filled by JS -->
+        </div>
+
+        <!-- Create Topic Modal -->
+        <div class="modal-overlay hidden" id="topicModal">
+          <div class="modal">
+            <div class="modal-header">
+              <h3>Create Topic</h3>
+              <button class="btn-icon" id="closeTopicModal">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">Topic Name</label>
+                <input type="text" id="topicNameInput" class="form-input" placeholder="e.g. user-events" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Partitions</label>
+                  <input type="number" id="topicPartitions" class="form-input" value="3" min="1" max="20" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Replication Factor</label>
+                  <input type="number" id="topicReplication" class="form-input" value="1" min="1" max="3" />
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" id="cancelTopicModal">Cancel</button>
+              <button class="btn btn-primary" id="confirmCreateTopic">Create Topic</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Consumers View -->
+      <div class="view" id="view-consumers">
+        <div class="page-header">
+          <h1>Consumer Groups</h1>
+        </div>
+
+        <div class="consumers-list" id="consumersList">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <!-- Producer View -->
+      <div class="view" id="view-producer">
+        <div class="page-header">
+          <h1>Producer Control</h1>
+        </div>
+
+        <div class="two-col">
+          <div class="section-card">
+            <div class="section-header"><h2>Auto-Producer Settings</h2></div>
+            <div class="producer-controls">
+              <div class="control-row">
+                <div class="control-label">
+                  <span>Status</span>
+                  <span class="control-hint" id="producerStatusHint">Running</span>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="producerToggle" checked />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+              <div class="control-row">
+                <div class="control-label">
+                  <span>Speed</span>
+                  <span class="control-hint mono" id="speedHint">1000ms</span>
+                </div>
+                <input type="range" id="speedSlider" min="100" max="5000" value="1000" step="100" class="slider" />
+              </div>
+              <div class="control-row">
+                <div class="control-label">
+                  <span>Batch Size</span>
+                  <span class="control-hint mono" id="batchHint">3 msgs</span>
+                </div>
+                <input type="range" id="batchSlider" min="1" max="20" value="3" step="1" class="slider" />
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-header"><h2>Manual Produce</h2></div>
+            <div class="manual-produce-form">
+              <div class="form-group">
+                <label class="form-label">Topic</label>
+                <select id="manualTopic" class="form-input">
+                  <option value="app-logs">app-logs</option>
+                  <option value="error-logs">error-logs</option>
+                  <option value="audit-events">audit-events</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Log Level</label>
+                <select id="manualLevel" class="form-input">
+                  <option value="INFO">INFO</option>
+                  <option value="DEBUG">DEBUG</option>
+                  <option value="WARN">WARN</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="FATAL">FATAL</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Message</label>
+                <textarea id="manualMessage" class="form-input form-textarea" placeholder="Leave empty for auto-generated message..."></textarea>
+              </div>
+              <button class="btn btn-primary full-width" id="sendManualBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Produce Message
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent produced messages -->
+        <div class="section-card" style="margin-top:1rem">
+          <div class="section-header"><h2>Recently Produced</h2></div>
+          <div class="log-stream-container short" id="producerLog">
+            <div class="stream-empty"><p>No messages yet</p></div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
